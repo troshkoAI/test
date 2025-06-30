@@ -1,0 +1,1457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Troško Potroško - Cloud Expense Tracker</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    
+    <!-- PDF Export Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+    <!-- FIREBASE SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+    
+    <style>
+        /* --- CSS Reset & Base Styles --- */
+        :root {
+            --bg-main: #f4f7f6;
+            --bg-sidebar: #ffffff;
+            --bg-card: #ffffff;
+            --text-dark: #2c3e50;
+            --text-light: #7f8c8d;
+            --primary: #1abc9c;
+            --primary-dark: #16a085;
+            --secondary: #ecf0f1;
+            --secondary-dark: #bdc3c7;
+            --danger: #e74c3c;
+            --danger-dark: #c0392b;
+            --success: #2ecc71;
+            --warning: #f1c40f;
+            --border-color: #e0e6ed;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            --font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-main);
+            color: var(--text-dark);
+            transition: background-color 0.3s ease, color 0.3s ease;
+            overflow: hidden; /* Prevent body scroll, layout handles it */
+        }
+
+        /* --- Login/Loading Container Styles --- */
+        #login-container, #loading-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            text-align: center;
+            background-color: var(--bg-main);
+        }
+        #login-container h1, #loading-container h1 { font-size: 3rem; margin-bottom: 10px; color: var(--text-dark); }
+        #login-container p, #loading-container p { font-size: 1.2rem; color: var(--text-light); margin-bottom: 30px; }
+        .google-signin-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 15px;
+            padding: 12px 24px;
+            border-radius: 8px;
+            background-color: #fff;
+            color: #757575;
+            font-size: 16px;
+            font-weight: 600;
+            border: 1px solid #ccc;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,.1);
+        }
+        .google-signin-btn:hover { box-shadow: 0 4px 8px rgba(0,0,0,.15); transform: translateY(-1px); }
+        .google-signin-btn img { width: 24px; height: 24px; }
+        .hidden { display: none !important; } /* Important to override default display */
+        
+        .app-layout {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            height: 100vh;
+        }
+        
+        /* --- Sidebar (Controls & Filters) --- */
+        .sidebar {
+            background-color: var(--bg-sidebar);
+            border-right: 1px solid var(--border-color);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 25px; 
+            height: 100vh;
+            overflow-y: auto;
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+        }
+        .user-profile{display:flex;align-items:center;gap:12px;margin-bottom:10px;padding:10px;background:var(--secondary);border-radius:8px}.user-profile img{width:40px;height:40px;border-radius:50%}.user-profile-info{flex-grow:1}.user-profile-info .name{font-weight:600;font-size:1rem}.user-profile-info .email{font-size:.8rem;color:var(--text-light)}.btn-logout{background:0 0;border:none;font-size:1.5rem;cursor:pointer;color:var(--text-light);padding:5px;border-radius:50%}.btn-logout:hover{background:var(--secondary-dark);color:var(--text-dark)}
+        .actions-group, .filters-group { display: flex; flex-direction: column; gap: 10px; } 
+        .filters-group h2 { font-size: 1.2rem; color: var(--text-dark); border-bottom: 2px solid var(--border-color); padding-bottom: 8px; margin-bottom: 4px; }
+        .btn { padding: 12px 15px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; font-size: 14px; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn-primary { background-color: var(--primary); color: white; }
+        .btn-primary:hover { background-color: var(--primary-dark); transform: translateY(-1px); }
+        .btn-secondary { background-color: var(--secondary); color: var(--text-dark); }
+        .btn-secondary:hover { background-color: var(--secondary-dark); }
+        .btn-danger { background-color: var(--danger); color: white; }
+        .btn-danger:hover { background-color: var(--danger-dark); }
+        .filter-control { display: flex; flex-direction: column; gap: 5px; }
+        .filter-control label { font-weight: 600; color: var(--text-light); font-size: 0.85rem; }
+        .filter-control input, .filter-control select { width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; background-color: #fdfdfd; color: var(--text-dark); }
+        .filter-control input:focus, .filter-control select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(26, 188, 156, 0.2); }
+        
+        /* --- Main Content & Tab Styles --- */
+        .main-content { padding: 25px; overflow-y: auto; }
+        
+        .app-title-header {
+            position: relative; 
+            text-align: center; 
+            margin-bottom: 20px;
+        }
+        #household-title { font-size: 2.5rem; color: var(--text-dark); margin-bottom: 5px; }
+        .app-title-header p { font-size: 1rem; color: var(--text-light); }
+        .app-title-header #theme-toggle {
+            position: absolute;
+            top: 50%;
+            right: 0;
+            transform: translateY(-50%);
+            font-size: 1.8rem;
+            padding: 5px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            color: var(--text-light);
+            border-radius: 8px;
+        }
+        .app-title-header #theme-toggle:hover {
+             background: var(--secondary);
+        }
+
+        .save-status { display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 8px; font-size: 0.9rem; transition: all 0.3s ease; font-weight: 500; justify-content: center; }
+        .save-status.saved { background-color: #e8f8f5; color: #16a085; }
+        .save-status.saving { background-color: #fef9e7; color: #f39c12; }
+        .save-status.error { background-color: #fbeae5; color: #c0392b; }
+
+        .horizontal-tabs { display: flex; border-bottom: 1px solid var(--border-color); margin-bottom: 25px; gap: 5px; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 5px; }
+        .horizontal-tabs .btn { border-radius: 8px 8px 0 0; border: none; background-color: transparent; color: var(--text-light); border-bottom: 3px solid transparent; padding: 12px 18px; flex-shrink: 0; }
+        .horizontal-tabs .btn:hover { background-color: var(--secondary); }
+        .horizontal-tabs .btn.active { color: var(--primary); font-weight: 700; border-bottom-color: var(--primary); background-color: var(--bg-card); box-shadow: var(--shadow); }
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; animation: fadeIn 0.4s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .content-section { background-color: var(--bg-card); border-radius: 12px; box-shadow: var(--shadow); margin-bottom: 25px; transition: background-color 0.3s ease; }
+        .section-header { padding: 15px 20px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+        .section-header h2 { font-size: 1.5rem; }
+        .section-content { padding: 20px; }
+        .help-content ul { list-style-type: disc; list-style-position: outside; padding-left: 20px; }
+        .help-content li { margin-bottom: 12px; line-height: 1.6; }
+        .help-content h3 { margin-top: 25px; margin-bottom: 10px; font-size: 1.4rem; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; }
+        .help-content h4 { margin-top: 20px; margin-bottom: 8px; font-size: 1.1rem; color: var(--primary-dark); }
+        .help-content code { background: var(--secondary); padding: 2px 6px; border-radius: 4px; font-family: 'Courier New', monospace; color: var(--danger); }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 15px; }
+        .stats-summary-container { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 15px; margin-bottom: 15px; }
+        .stat-card { background-color: var(--bg-card); padding: 20px; border-radius: 12px; box-shadow: var(--shadow); border-bottom: 4px solid; transition: background-color 0.3s ease; }
+        .stat-card.total { border-color: var(--primary); }
+        .stat-card.konzum { border-color: #e60012; }
+        .stat-card.lidl { border-color: #0066cc; }
+        .stat-card.spar { border-color: #008a3e; }
+        .stat-card.kaufland { border-color: #c90000; }
+        .stat-card.dm { border-color: #a0d87a; }
+        .stat-card.muller { border-color: #f472b6; }
+        .stat-card.bipa { border-color: #ed008c; }
+        .stat-card.ina { border-color: #ff6a00; }
+        .stat-card.petrol { border-color: #009fe3; }
+        .stat-card.ikea { border-color: #0051ba; }
+        .stat-card.lesninaxxxl { border-color: #c1002a; }
+        .stat-card.pevex { border-color: #004c97; }
+        .stat-card.decathlon { border-color: #0082c3; }
+        .stat-card.intersport { border-color: #e4002b; }
+        .stat-card.kiosk { border-color: #555555; }
+        .stat-card.pekara { border-color: #d1b46f; }
+        .stat-card.restoran { border-color: #f59e0b; }
+        .stat-card.kafić { border-color: #8d6e63; }
+        .stat-card.ljekarna { border-color: #4caf50; }
+        .stat-card.onlinetrgovina { border-color: #2196f3; }
+        .stat-card.tržnica { border-color: #795548; }
+        .stat-card.servisautokućanskiitd { border-color: #607d8b; }
+        .stat-card.ostalo { border-color: #7f8c8d; } 
+        .stat-card.hep { border-color: #ff6600; }
+        .stat-card.dynamic-stat-card { cursor: pointer; }
+        .stat-card.prehranainamirnice { border-color: #ff6384; }
+        .stat-card.stanovanje { border-color: #36a2eb; }
+        .stat-card.reije { border-color: #ffce56; }
+        .stat-card.prijevoz { border-color: #4bc0c0; }
+        .stat-card.zdravljeiosobnanjega { border-color: #9966ff; }
+        .stat-card.odjeaiobua { border-color: #ff9f40; }
+        .stat-card.kuanstvoioprema { border-color: #c9cbcf; }
+        .stat-card.djeca { border-color: #f59e0b; }
+        .stat-card.kuniljubimci { border-color: #8d6e63; }
+        .stat-card.restoraniizabava { border-color: #e83e8c; }
+        .stat-card.putovanjaviednevna { border-color: #20c997; }
+        .stat-card.financije { border-color: #6f42c1; }
+        .stat-card.obrazovanje { border-color: #fd7e14; }
+        .stat-card.pokloniidonacije { border-color: #6610f2; }
+        .stat-card.posaoiprofesionalnirazvoj { border-color: #17a2b8; }
+        .stat-card.ostalonekategorizirano { border-color: #6c757d; }
+        #categoryStatsContainer .stat-card { cursor: pointer; }
+
+        .stat-card.avgday { border-color: #3498db; }
+        .stat-card.avgmonth { border-color: #9b59b6; }
+        .stat-card h3 { font-size: 0.9rem; text-transform: uppercase; color: var(--text-light); margin-bottom: 8px; }
+        .stat-card .amount { 
+            font-size: 2rem; 
+            font-weight: 800; 
+            color: var(--text-dark);
+            letter-spacing: -0.5px;
+        }
+        
+        .chart-wrapper { position: relative; width: 100%; max-width: 1000px; height: 750px; }
+        .chart-wrapper.full-width { max-width: none; }
+        .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; justify-items: center; }
+        .expenses-header { padding: 0 5px 15px 5px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; }
+        .view-controls { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+        .view-toggle, .layout-toggle, .bulk-actions, .export-actions { display: flex; gap: 10px; }
+        .view-toggle button, .layout-toggle button, .bulk-actions button, .export-actions button { padding: 10px 16px; font-size: 0.9rem; }
+        .view-toggle button.active, .layout-toggle button.active { background-color: var(--primary); color: white; }
+        
+        #entriesList.grid-layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 15px; }
+        #entriesList.grid-layout .entry { border: 1px solid var(--border-color); border-radius: 8px; background-color: var(--bg-card); }
+        #entriesList.grid-layout .entry:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(0,0,0,0.1); border-color: var(--primary); }
+        .entry { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "check name actions" "check details details"; align-items: center; column-gap: 15px; row-gap: 2px; padding: 10px 15px; border-bottom: 1px solid var(--border-color); transition: all 0.2s; cursor: pointer; }
+        #entriesList.single-column-list .entry { border-left: none; border-right: none; border-top: none; border-radius: 0; }
+        #entriesList.single-column-list .entry:first-child { border-top: 1px solid var(--border-color); }
+        .entry.selected { background-color: #e8f8f5; border-color: var(--primary-dark); }
+        .entry-checkbox-cell { grid-area: check; align-self: center; }
+        .entry-checkbox { pointer-events: none; }
+        .entry-name { grid-area: name; font-weight: 600; font-size: 0.95rem; align-self: end; }
+        .entry-details { grid-area: details; display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 15px; font-size: 0.85rem; color: var(--text-light); align-self: start; }
+        .entry-category-store-group { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+        .entry-category-info { display: contents; }
+        .entry-main-category::after { content: '•'; margin: 0 5px; }
+        .entry-quantity { font-style: italic; color: var(--primary-dark); }
+        .entry-store { padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+        .entry-price-actions { grid-area: actions; display: flex; align-items: center; justify-content: flex-end; gap: 15px; }
+        .entry-price { font-size: 1.1rem; font-weight: 700; }
+        .entry-actions { display: flex; gap: 8px; }
+        .btn-icon { padding: 8px; line-height: 1; cursor: pointer; }
+        .entry-date { font-size: 0.85rem; color: var(--text-light); }
+        
+        .entry-store.konzum { background: #ffe6e6; color: #e60012; }
+        .entry-store.lidl { background: #e6f3ff; color: #0066cc; }
+        .entry-store.spar { background: #e0f4e8; color: #007a33; }
+        .entry-store.kaufland { background: #fee7e7; color: #c90000; }
+        .entry-store.dm { background: #e9f5e1; color: #4a902e; }
+        .entry-store.muller { background: #fdf2f8; color: #be185d; }
+        .entry-store.bipa { background: #fce4ec; color: #ed008c; }
+        .entry-store.ina { background: #fff0e6; color: #cc5200; }
+        .entry-store.petrol { background: #e0f7ff; color: #007fb1; }
+        .entry-store.ikea { background: #e0f2f7; color: #004085; }
+        .entry-store.lesninaxxxl { background: #fae0e5; color: #b00026; }
+        .entry-store.pevex { background: #e0edff; color: #003b75; }
+        .entry-store.decathlon { background: #e0f2fa; color: #006a9e; }
+        .entry-store.intersport { background: #fde4e9; color: #c30025; }
+        .entry-store.kiosk { background: #eeeeee; color: #444444; }
+        .entry-store.pekara { background: #fcf8e3; color: #b8860b; }
+        .entry-store.restoran { background: #fffbeb; color: #b45309; }
+        .entry-store.kafić { background: #efebe9; color: #5d4037; }
+        .entry-store.ljekarna { background: #e8f5e9; color: #1b5e20; }
+        .entry-store.onlinetrgovina { background: #e3f2fd; color: #0d47a1; }
+        .entry-store.tržnica { background: #fbe9e7; color: #3e2723; }
+        .entry-store.servisautokućanskiitd { background: #eceff1; color: #263238; }
+        .entry-store.ostalo { background: #f0f0f0; color: #718096; }
+        .entry-store.hep { background: #ffe6cc; color: #ff6600; } 
+
+
+        .top-spenders-list { list-style: none; padding-left: 10px; }
+        .top-spenders-list li { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed var(--border-color); }
+        .top-spenders-list li::before { content: '•'; color: var(--text-light); font-weight: bold; display: inline-block; width: 1em; margin-left: -1em; }
+        .top-spenders-list li:last-child { border-bottom: none; }
+        .top-spenders-name { flex-grow: 1; margin-left: 5px; }
+        .top-spenders-price { font-weight: 600; margin-left: 15px; }
+
+        .time-group { margin-bottom: 15px; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
+        .time-group-header { background: #f8f9f9; padding: 12px 15px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .time-group-header:hover { background: #f1f3f3; }
+        .time-group-header h3 { font-size: 1.1rem; }
+        .time-group-total { font-weight: 700; color: var(--primary); }
+        .time-group-content { display: none; padding: 0; } .time-group-content.expanded { display: block; }
+        .time-group .entry { grid-template-columns: 1fr auto; grid-template-areas: "name actions" "details details"; }
+        
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); justify-content: center; align-items: center; }
+        .modal-content { background-color: var(--bg-card); padding: 30px; border-radius: 12px; width: 90%; max-width: 650px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2); animation: slide-down 0.3s ease-out; transition: background-color 0.3s ease; margin: 5% auto; }
+        @keyframes slide-down { from { transform: translateY(-30px); opacity: 0; } to { opacity: 1; } }
+        .modal h2 { margin-bottom: 20px; }
+        .modal-scroll-content { max-height: 60vh; overflow-y: auto; padding-right: 15px; margin-right: -15px;}
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 0.9rem; }
+        .form-group.checkbox-group { display: flex; align-items: center; gap: 8px; }
+        .form-group.checkbox-group label { margin-bottom: 0; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; background-color: var(--bg-main); color: var(--text-dark); }
+        .form-group.checkbox-group input[type="checkbox"] { width: auto; height: auto; }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(26, 188, 156, 0.2); }
+        .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 25px; }
+        .custom-input { display: none; margin-top: 10px; } .custom-input.show { display: block; }
+        .file-input { display: none; } /* .hidden is defined above now */
+        .empty-state { text-align: center; padding: 50px 20px; color: var(--text-light); }
+        .empty-state-icon { font-size: 4rem; margin-bottom: 15px; }
+
+        .comparison-table, .management-table, .savings-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .comparison-table th, .comparison-table td, .management-table th, .management-table td, .savings-table th, .savings-table td { padding: 12px 15px; border: 1px solid var(--border-color); text-align: left; }
+        .comparison-table th, .management-table th, .savings-table th { background-color: var(--bg-main); font-weight: 600; }
+        .comparison-table th[data-sort] { cursor: pointer; }
+        .comparison-table th[data-sort]:hover { background-color: var(--secondary-dark); }
+        .comparison-table .increase, .savings-table .deficit { color: var(--danger); }
+        .comparison-table .decrease, .savings-table .surplus { color: var(--success); }
+        .savings-table td:last-child, .management-table td:last-child { text-align: right; }
+
+        .management-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 25px; }
+        .management-search { margin-bottom: 20px; width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; }
+        .management-list-container { max-height: 400px; overflow-y: auto; }
+        .management-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        
+        .backup-reminder { background-color: var(--warning); color: var(--text-dark); padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .backup-reminder .btn { margin-left: 15px; }
+        .backup-reminder .close-btn { background: transparent; border: none; font-size: 1.5rem; cursor: pointer; line-height: 1; padding: 0 5px; opacity: 0.7; }
+        .backup-reminder .close-btn:hover { opacity: 1; }
+
+        .modal-tabs { display: flex; border-bottom: 1px solid var(--border-color); margin-bottom: 20px; }
+        .modal-tab-btn { padding: 10px 15px; border: none; background: transparent; cursor: pointer; border-bottom: 3px solid transparent; color: var(--text-light); }
+        .modal-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+        .modal-tab-pane { display: none; }
+        .modal-tab-pane.active { display: block; }
+        
+        .income-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px; align-items: end; }
+        .income-form-actions { grid-column: 1 / -1; display: flex; gap: 10px; margin-top: 10px; }
+
+        body.dark-mode {
+            --bg-main: #1a1a1b; --bg-sidebar: #2c2c2e; --bg-card: #2c2c2e; --text-dark: #f0f0f0; --text-light: #9e9e9e; --border-color: #424242; --secondary: #3c3c3e; --secondary-dark: #555557; --shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+        body.dark-mode .filter-control input, body.dark-mode .filter-control select, body.dark-mode .management-search { background-color: #333; }
+        body.dark-mode .horizontal-tabs .btn:hover { background-color: #3c3c3e; }
+        body.dark-mode .horizontal-tabs .btn.active { background-color: #2c2c2e; }
+        body.dark-mode .save-status.saved { background-color: #1c3b34; color: #5eead4; }
+        body.dark-mode .save-status.saving { background-color: #423419; color: #fcd34d; }
+        body.dark-mode .save-status.error { background-color: #451b14; color: #ff8a80; }
+        body.dark-mode .entry { border-color: var(--border-color); background-color: var(--bg-card); }
+        body.dark-mode .entry:hover { border-color: var(--primary); background-color: #333335; }
+        body.dark-mode .entry.selected { background-color: #1c3b34; border-color: var(--primary-dark); }
+        body.dark-mode .time-group-header { background: #222224; }
+        body.dark-mode .time-group-header:hover { background: #2f2f31; }
+        body.dark-mode .entry-store.konzum { background: #5a0007; color: #ff8088; }
+        body.dark-mode .entry-store.lidl { background: #00294d; color: #66b3ff; }
+        body.dark-mode .entry-store.spar { background: #003a19; color: #66bb6a; }
+        body.dark-mode .entry-store.kaufland { background: #5a0000; color: #ff8a80; }
+        body.dark-mode .entry-store.dm { background: #2a3d1f; color: #a0d87a; }
+        body.dark-mode .entry-store.muller { background: #5e082c; color: #f9a8d4; }
+        body.dark-mode .entry-store.bipa { background: #610039; color: #f48fb1; }
+        body.dark-mode .entry-store.ina { background: #662a00; color: #ffab91; }
+        body.dark-mode .entry-store.petrol { background: #003e5a; color: #81d4fa; }
+        body.dark-mode .entry-store.ikea { background: #0a2f5a; color: #90caf9; }
+        body.dark-mode .entry-store.lesninaxxxl { background: #500012; color: #ffcdd2; }
+        body.dark-mode .entry-store.pevex { background: #002143; color: #a6c8ff; }
+        body.dark-mode .entry-store.decathlon { background: #00364f; color: #80deea; }
+        body.dark-mode .entry-store.intersport { background: #550011; color: #ffcdd2; }
+        body.dark-mode .entry-store.kiosk { background: #333333; color: #cccccc; }
+        body.dark-mode .entry-store.pekara { background: #4a4023; color: #e3c779; }
+        body.dark-mode .entry-store.restoran { background: #4a3804; color: #f6c86a; }
+        body.dark-mode .entry-store.kafić { background: #3e2723; color: #bcaaa4; }
+        body.dark-mode .entry-store.ljekarna { background: #132d14; color: #a5d6a7; }
+        body.dark-mode .entry-store.onlinetrgovina { background: #0a2f5a; color: #90caf9; }
+        body.dark-mode .entry-store.tržnica { background: #30241e; color: #ffccbc; }
+        body.dark-mode .entry-store.servisautokućanskiitd { background: #2f383c; color: #b0bec5; }
+        body.dark-mode .entry-store.ostalo { background: #374151; color: #9ca3af; }
+        body.dark-mode .entry-store.hep { background: #803300; color: #ff9966; }
+
+
+        @media (max-width: 992px) {
+            .app-layout { grid-template-columns: 1fr; height: auto; }
+            .sidebar { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border-color); }
+        }
+        @media (max-width: 768px) { #entriesList { grid-template-columns: 1fr; } }
+        @media (max-width: 576px) { .stats-grid { grid-template-columns: 1fr 1fr; } .expenses-header { flex-direction: column; } }
+    </style>
+</head>
+<body>
+    <!-- Login Container -->
+    <div id="login-container">
+        <h1>Welcome to Troško Potroško</h1>
+        <p>Your Shared Household Expense Tracker</p>
+        <button id="signInBtn" class="google-signin-btn">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google logo">
+            <span>Sign in with Google</span>
+        </button>
+    </div>
+
+    <!-- Loading Container (shown after login, before data loads) -->
+    <div id="loading-container" class="hidden">
+        <h1>Loading Your Household...</h1>
+        <p>Please wait a moment.</p>
+    </div>
+
+
+    <!-- Main App Container (initially hidden) -->
+    <div id="app-container" class="app-layout hidden">
+        <aside class="sidebar">
+            <div id="user-profile-container" class="user-profile"></div>
+
+            <div class="actions-group">
+                <button class="btn btn-primary" onclick="showAddModal()">➕ Add Expense</button>
+                <button class="btn btn-primary" onclick="showReceiptModal()">📄 Parse Receipt with AI Helper</button>
+                <button class="btn btn-secondary" onclick="showInviteModal()">🧑‍🤝‍🧑 Invite Member</button>
+            </div>
+            
+            <div id="saveStatus" class="save-status saved">☁️ Synced to cloud</div>
+            
+            <div class="filters-group">
+                <h2>🔍 Filters & Sort</h2>
+                <button class="btn btn-secondary" onclick="clearFilters()">Clear All Filters</button>
+                <div class="filter-control"><label for="sortFilter">Sort By</label><select id="sortFilter" onchange="applyFilters()"><option value="date-desc">Date (Newest)</option><option value="date-asc">Date (Oldest)</option><option value="price-desc">Price (High-Low)</option><option value="price-asc">Price (Low-High)</option><option value="name-asc">Name (A-Z)</option><option value="name-desc">Name (Z-A)</option></select></div>
+                <div id="standard-filters">
+                    <div class="filter-control"><label for="searchFilter">Search Item or Store</label><input type="text" id="searchFilter" placeholder="e.g., Coffee, Lidl" oninput="debouncedApplyFilters()"></div>
+                    
+                    <div class="filter-control"><label for="categoryFilter">Category</label><select id="categoryFilter" onchange="updateSubCategoryFilter(); applyFilters()"><option value="">All Categories</option></select></div>
+                    <div class="filter-control"><label for="subCategoryFilter">Sub-Category</label><select id="subCategoryFilter" onchange="applyFilters()"><option value="">All Sub-Categories</option></select></div>
+                    <div class="filter-control"><label for="storeFilter">Store</label><select id="storeFilter" onchange="applyFilters()"><option value="">All Stores</option></select></div>
+                    <div class="filter-control"><label for="monthFilter">Month</label><select id="monthFilter" onchange="applyFilters()"><option value="">All Months</option></select></div>
+                    <div class="filter-control"><label for="yearFilter">Year</label><select id="yearFilter" onchange="applyFilters()"><option value="">All Years</option></select></div>
+                </div>
+            </div>
+
+        </aside>
+
+        <main class="main-content">
+            <div id="backupReminder" class="backup-reminder" style="display: none;">
+                <span></span>
+                <button class="btn btn-primary" onclick="exportData()">Export Now</button>
+                <button class="close-btn" onclick="this.parentElement.style.display='none'">&times;</button>
+            </div>
+            
+            <header class="app-title-header">
+                <h1 id="household-title">Troško Potroško</h1>
+                <p>Troško Potroško - Di su pare?</p>
+                <button id="theme-toggle" title="Toggle Dark Mode">🌙</button>
+            </header>
+
+            <div class="horizontal-tabs" id="main-tabs">
+                <button class="btn" onclick="switchTab('statsPane', this)">⭐ Overview</button>
+                <button class="btn" onclick="switchTab('overviewCategoryPane', this)">🗂️ Overview-category</button>
+                <button class="btn" onclick="switchTab('analyticsPane', this)">📊 Analytics</button>
+                <button class="btn" onclick="switchTab('expensesPane', this)">📝 Expenses</button>
+                <button class="btn" onclick="switchTab('savingsPane', this)">💰 Savings</button>
+                <button class="btn" onclick="switchTab('spendersPane', this)">🏆 Top Spenders</button>
+                <button class="btn" onclick="switchTab('poskupljenjaPane', this)">📈 Price Increases</button>
+                <button class="btn" onclick="switchTab('managementPane', this)">🗂️ Manage Categories</button>
+                <button class="btn" onclick="switchTab('systemManagementPane', this)">⚙️ Household Settings</button>
+                <button class="btn" onclick="switchTab('helpPane', this)">❓ Help</button>
+            </div>
+
+            <div id="statsPane" class="tab-pane">
+                <div class="stats-grid" id="statsContainer">
+                </div>
+            </div>
+
+            <div id="overviewCategoryPane" class="tab-pane">
+                <div class="stats-grid" id="categoryStatsContainer">
+                </div>
+            </div>
+
+            <div id="expensesPane" class="tab-pane">
+                 <div class="content-section">
+                    <div class="section-content">
+                        <header class="expenses-header">
+                            <div class="view-controls">
+                                <div class="view-toggle">
+                                    <button id="monthlyViewBtn" class="btn btn-secondary" onclick="switchView('monthly')">Monthly</button>
+                                    <button id="yearlyViewBtn" class="btn btn-secondary" onclick="switchView('yearly')">Yearly</button>
+                                    <button id="listBtn" class="btn btn-secondary" onclick="switchView('list')">List</button>
+                                    <button id="gridBtn" class="btn btn-secondary" onclick="switchView('grid')">Grid</button>
+                                </div>
+                                <div class="export-actions" style="position: relative;">
+                                    <button class="btn btn-secondary" id="exportDropdown">Export ▾</button>
+                                    <ul id="exportDropdownMenu" style="display:none; position:absolute; top: 100%; left: 0; background:var(--bg-card); list-style:none; border:1px solid var(--border-color); border-radius: 8px; padding: 5px 0; z-index:100; min-width: 150px; box-shadow: var(--shadow);">
+                                        <li><a href="#" onclick="exportToCSV(event)" style="display:block; padding: 8px 15px; color: var(--text-dark); text-decoration:none;">to CSV (for Excel)</a></li>
+                                        <li><a href="#" onclick="exportToPDF(event)" style="display:block; padding: 8px 15px; color: var(--text-dark); text-decoration:none;">to PDF</a></li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="bulk-actions" id="bulkActions">
+                                <button class="btn btn-secondary" onclick="selectAll()">Select All</button>
+                                <button class="btn btn-secondary" onclick="unselectAll()">Unselect All</button>
+                                <button class="btn btn-primary" onclick="showBulkEditModal()">Edit (<span id="selectedCount">0</span>)</button>
+                                <button class="btn btn-danger" onclick="deleteSelectedItems()">Delete</button>
+                            </div>
+                        </header>
+                        <div id="listView">
+                            <div id="entriesList">
+                                <div class="empty-state"><div class="empty-state-icon">📝</div><h3>No Expenses Yet</h3><p>Click 'Add Expense' to start tracking.</p></div>
+                            </div>
+                        </div>
+                        <div id="monthlyView" class="hidden">
+                            <div id="monthlyList">
+                                <div class="empty-state"><div class="empty-state-icon">🗓️</div><h3>No Monthly Data</h3><p>Your expenses will be grouped by month here.</p></div>
+                            </div>
+                        </div>
+                        <div id="yearlyView" class="hidden">
+                            <div id="yearlyList">
+                                <div class="empty-state"><div class="empty-state-icon">🗓️</div><h3>No Yearly Data</h3><p>Your expenses will be grouped by year here.</p></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="spendersPane" class="tab-pane">
+                 <div class="content-section">
+                     <div class="section-header">
+                        <h2>Top Spenders</h2>
+                        <button class="btn btn-secondary btn-icon" onclick="event.stopPropagation(); showTopSpendersExclusionModal();" title="Configure Top Spenders">⚙️</button>
+                    </div>
+                    <div class="section-content">
+                        <ul class="top-spenders-list" id="topSpendersList"></ul>
+                    </div>
+                </div>
+            </div>
+
+            <div id="analyticsPane" class="tab-pane">
+                <section class="content-section">
+                    <div class="section-header">
+                        <h2>Visual Insights</h2>
+                        <div>
+                            <button id="chartBackBtn" class="btn btn-secondary hidden" onclick="restorePreviousFilterState()">↩️ Back to Overview</button>
+                            <button class="btn btn-secondary btn-icon" onclick="event.stopPropagation(); showChartExclusionModal();" title="Configure Charts">⚙️</button>
+                        </div>
+                    </div>
+                    <div class="section-content charts-grid">
+                        <div class="empty-state" id="chartsEmptyState"><div class="empty-state-icon">📈</div><h3>No Data for Charts</h3><p>Add some expenses to see your spending habits.</p></div>
+                        <div class="chart-wrapper" id="categoryChartContainer"><canvas id="categoryChart"></canvas></div>
+                        <div class="chart-wrapper" id="storeChartContainer"><canvas id="storeChart"></canvas></div>
+                        <div class="chart-wrapper" id="subcategoryChartContainer"><canvas id="subcategoryChart"></canvas></div>
+                    </div>
+                </section>
+                 <section class="content-section">
+                     <div class="section-header">
+                        <div style="display: flex; align-items: center; gap: 20px;">
+                             <h2>Monthly Trends</h2>
+                             <select id="trendsCategoryFilter" onchange="renderCharts()" style="padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border-color); background-color: var(--bg-main); color: var(--text-dark);"></select>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="empty-state" id="trendsEmptyState"><div class="empty-state-icon">📈</div><h3>No Data for Trends</h3><p>Add some expenses to see monthly trends.</p></div>
+                        <div class="chart-wrapper full-width" id="monthlyTrendChartContainer"><canvas id="monthlyTrendChart"></canvas></div>
+                    </div>
+                </section>
+                <section class="content-section">
+                     <div class="section-header">
+                        <div style="display: flex; align-items: center; gap: 20px;">
+                             <h2>Yearly Trends</h2>
+                             <select id="yearlyTrendsCategoryFilter" onchange="renderCharts()" style="padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border-color); background-color: var(--bg-main); color: var(--text-dark);"></select>
+                         </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="empty-state" id="yearlyTrendsEmptyState"><div class="empty-state-icon">📈</div><h3>No Data for Trends</h3><p>You need data spanning multiple years to see yearly trends.</p></div>
+                        <div class="chart-wrapper full-width" id="yearlyTrendChartContainer"><canvas id="yearlyTrendChart"></canvas></div>
+                    </div>
+                </section>
+                <section class="content-section">
+                    <div class="section-header">
+                        <h2>Total Spend Trend</h2>
+                    </div>
+                    <div class="section-content">
+                        <div class="empty-state" id="totalSpendTrendEmptyState"><div class="empty-state-icon">📈</div><h3>Not Enough Data</h3><p>You need expenses over multiple months to see a trend.</p></div>
+                        <div class="chart-wrapper full-width" id="totalSpendTrendChartContainer"><canvas id="totalSpendTrendChart"></canvas></div>
+                    </div>
+                </section>
+            </div>
+
+            <div id="poskupljenjaPane" class="tab-pane">
+                <section class="content-section">
+                    <div class="section-header">
+                        <h2>Spending Comparison</h2>
+                    </div>
+                    <div class="section-content">
+                        <div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; align-items: flex-end;">
+                            <div class="filter-control">
+                                <label for="baseYearSelect">Base Year</label>
+                                <select id="baseYearSelect" onchange="updateComparisonView()"></select>
+                            </div>
+                            <div class="filter-control">
+                                <label for="compareYearSelect">Compare To Year</label>
+                                <select id="compareYearSelect" onchange="updateComparisonView()"></select>
+                            </div>
+                            <div class="filter-control">
+                                <label>Compare By</label>
+                                <div id="compareByToggle" class="view-toggle">
+                                    <button data-group="category" class="btn btn-secondary active" onclick="updateComparisonView('category')">Category</button>
+                                    <button data-group="subcategory" class="btn btn-secondary" onclick="updateComparisonView('subcategory')">Sub-Category</button>
+                                    <button data-group="store" class="btn btn-secondary" onclick="updateComparisonView('store')">Store</button>
+                                </div>
+                            </div>
+                            <div class="filter-control">
+                                <label>View Mode</label>
+                                <div id="comparisonViewToggle" class="view-toggle">
+                                    <button data-view="table" class="btn btn-secondary active" onclick="updateComparisonView(null, 'table')">Table</button>
+                                    <button data-view="chart" class="btn btn-secondary" onclick="updateComparisonView(null, 'chart')">Chart</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="comparisonTableContainer"></div>
+                        <div id="comparisonChartContainer" class="chart-wrapper full-width hidden" style="height: 800px; margin-top: 20px;">
+                            <canvas id="tornadoChart"></canvas>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+             <div id="savingsPane" class="tab-pane">
+                <section class="content-section">
+                     <div class="section-header">
+                        <h2>Monthly Income</h2>
+                    </div>
+                    <div class="section-content">
+                        <p style="color: var(--text-light); margin-bottom: 20px;">Enter your household income for a specific month and year. This will be used to calculate your savings. If you don't enter income for a month, the most recent previous income will be used automatically.</p>
+                        <form id="incomeForm" class="income-form">
+                            <div class="form-group"><label for="incomeYear">Year</label><select id="incomeYear" onchange="populateIncomeForm()"></select></div>
+                            <div class="form-group"><label for="incomeMonth">Month</label><select id="incomeMonth" onchange="populateIncomeForm()"></select></div>
+                            <div class="form-group"><label for="incomeAmount">Monthly Income (€)</label><input type="number" id="incomeAmount" step="0.01" min="0" required></div>
+                            <div class="income-form-actions">
+                                <button type="submit" class="btn btn-primary">Save Income</button>
+                                <button type="button" class="btn btn-secondary" onclick="loadSampleIncome()">Load Sample</button>
+                                <button type="button" class="btn btn-danger" onclick="clearAllIncomes()">Clear Incomes</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+                <section class="content-section">
+                     <div class="section-header">
+                        <h2>Savings Analysis</h2>
+                    </div>
+                    <div class="section-content">
+                        <div class="chart-wrapper full-width" style="height: 300px;" id="savingsChartContainer"><canvas id="savingsChart"></canvas></div>
+                        <div class="chart-wrapper full-width" style="height: 300px; margin-top: 30px;" id="cumulativeSavingsChartContainer"><canvas id="cumulativeSavingsChart"></canvas></div>
+                        <div class="management-section" style="margin-top: 30px;">
+                            <div class="management-header collapsed" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.classList.toggle('expanded');">
+                                <span>View Savings Data</span>
+                            </div>
+                            <div class="management-content">
+                                 <div id="savingsTableContainer" style="margin-top: 20px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <div id="managementPane" class="tab-pane">
+                 <section class="content-section">
+                     <div class="section-header"><h2>Manage Household Categories</h2></div>
+                    <div class="section-content">
+                        <div class="management-grid">
+                             <div>
+                                <div class="management-header">
+                                    <h3>Categories</h3>
+                                    <button class="btn btn-secondary btn-icon" onclick="createManagedItem('category')" title="Create New Category">➕</button>
+                                </div>
+                                <input type="text" id="manageCategorySearch" class="management-search" oninput="renderManagementTables()" placeholder="Search categories...">
+                                <div id="managementCategoriesContainer" class="management-list-container"></div>
+                            </div>
+                            <div>
+                                <div class="management-header">
+                                    <h3>Sub-Categories</h3>
+                                    <button class="btn btn-secondary btn-icon" onclick="showCreateSubCategoryModal()" title="Create New Sub-Category">➕</button>
+                                </div>
+                                <input type="text" id="manageSubCategorySearch" class="management-search" oninput="renderManagementTables()" placeholder="Search sub-categories...">
+                                <div id="managementSubCategoriesContainer" class="management-list-container"></div>
+                            </div>
+                            <div>
+                                <div class="management-header">
+                                    <h3>Stores</h3>
+                                    <button class="btn btn-secondary btn-icon" onclick="createManagedItem('store')" title="Create New Store">➕</button>
+                                </div>
+                                <input type="text" id="manageStoreSearch" class="management-search" oninput="renderManagementTables()" placeholder="Search stores...">
+                                <div id="managementStoresContainer" class="management-list-container"></div>
+                            </div>
+                        </div>
+                    </div>
+                 </section>
+            </div>
+
+            <div id="systemManagementPane" class="tab-pane">
+                <section class="content-section">
+                    <div class="section-header"><h2>Household Settings & Data</h2></div>
+                    <div class="section-content management-grid" style="gap: 40px;">
+
+                        <!-- Member Management Section -->
+                        <div style="grid-column: 1 / -1;">
+                            <div class="management-header">
+                                <h3>Household Members</h3>
+                            </div>
+                            <div id="householdMembersContainer" class="management-list-container" style="max-height: 200px;">
+                                <!-- Member list will be rendered here -->
+                            </div>
+                        </div>
+
+                        <!-- Invitation Management Section -->
+                        <div style="grid-column: 1 / -1;">
+                            <div class="management-header">
+                                <h3>Pending Invitations</h3>
+                            </div>
+                            <div id="pendingInvitesContainer" class="management-list-container" style="max-height: 200px;">
+                                <!-- Invites will be rendered here -->
+                            </div>
+                        </div>
+                        
+                        <!-- Data Management Section -->
+                        <div style="grid-column: 1 / -1;">
+                            <div class="management-header">
+                                <h3>Data Management</h3>
+                            </div>
+                            <div class="actions-group" style="flex-direction: row; gap: 15px; justify-content: center;">
+                                <label for="importFile" class="btn btn-secondary">📤 Import Data</label>
+                                <input type="file" id="importFile" class="file-input" accept=".json" onchange="importData(event)">
+                                <button class="btn btn-secondary" onclick="exportData()">📥 Export Data</button>
+                                <button class="btn btn-danger" onclick="clearAllData()">🗑️ Clear All Household Data</button>
+                            </div>
+                        </div>
+
+                    </div>
+                </section>
+            </div>
+
+            <div id="helpPane" class="tab-pane">
+                <section class="content-section">
+                   <div class="section-header"><h2>Help & Information Guide</h2></div>
+                   <div class="section-content help-content">
+                       <h3>Welcome to Troško Potroško!</h3>
+                       <p>This guide will help you get the most out of your shared household expense tracker.</p>
+                       
+                       <h4>Getting Started: Your Household</h4>
+                       <ul>
+                           <li><b>Creating a Household:</b> The first time you sign in with Google as a new user, you will be prompted to create your own household. Give it a name, and you're ready to start!</li>
+                           <li><b>Joining a Household:</b> If your email has been invited to a household, you will automatically join it when you sign in.</li>
+                           <li><b>Inviting Members:</b> Any existing member can invite a new person. Click the "🧑‍🤝‍🧑 Invite Member" button in the sidebar, enter their Google email address, and they will gain access the next time they log in.</li>
+                           <li><b>Data Separation:</b> Each household is a completely separate and secure container. No data is ever shared between different households.</li>
+                       </ul>
+
+                       <h4>Privacy & Security: Your Data is Yours</h4>
+                       <ul>
+                           <li><b>Your Own Database:</b> All data (expenses, categories, income) is stored directly in a private Firebase project that you or your household administrator controls. This app is simply a user-friendly interface to *your* database. The app developers have no access to your financial data.</li>
+                           <li><b>Secure Access:</b> Data access is controlled by Firebase's server-side Security Rules. Only authenticated members of a household can read or write data to that specific household, ensuring no unauthorized access.</li>
+                       </ul>
+
+                       <h4>General Usage & Interactive Features</h4>
+                       <p>Many elements in the app are interactive. Try clicking on them to explore your data!</p>
+                       <ul>
+                           <li><b>Dashboard Cards:</b> On the "Overview" and "Overview-category" tabs, clicking on a store or category card will instantly filter your expenses and take you to the "Expenses" tab.</li>
+                           <li><b>Chart Segments:</b> In "Analytics", you can click on a slice of a pie chart to drill down. A "↩️ Back to Overview" button will appear, allowing you to easily return to your previous, broader view.</li>
+                           <li><b>Monthly/Yearly Views:</b> In the "Expenses" tab, switch to "Monthly" or "Yearly" view to see your spending grouped by time period, with collapsible sections and a total for each group.</li>
+                           <li><b>Exporting Data:</b> In the "Expenses" tab, use the "Export" button to download your currently filtered data as a CSV (for Excel) or PDF file for your records.</li>
+                       </ul>
+
+                       <h4>The AI Receipt Helper</h4>
+                       <ul>
+                            <li><b>How it works:</b> The "Parse Receipt with AI" button generates a specialized text prompt for a large language model (like Google's AI Studio). This prompt instructs the AI on how to read a receipt and turn it into structured data for the app.</li>
+                            <li><b>Step 1:</b> Click "Generate Prompt & Open AI Studio". This copies the prompt and opens the AI tool. Paste the prompt, then upload a receipt image (`JPG`, `PNG`) or `PDF` from your device or Google Drive.</li>
+                            <li><b>Step 2:</b> The AI will output a JSON code block. Copy this entire block and paste it back into the app.</li>
+                            <li><b>Step 3:</b> Click "Import Items". The app will parse the code and add the expenses to your list.</li>
+                            <li><b>Using Templates:</b> For common recurring bills, you can use the "Use Monthly Bills Template". This pre-fills the text box. **You must manually change the `"price": 0.00` values to the correct amounts** before clicking "Import Items".</li>
+                       </ul>
+
+                       <h4>Backups & Using the App Locally</h4>
+                       <p>It's crucial to keep regular backups of your data. The app will remind you every 30 days via a notification banner.</p>
+                       <ul>
+                           <li><b>Creating a Backup:</b> Go to the "Household Settings" tab, find the "Data Management" section, and click "Export Data". This saves a <code>.json</code> file to your computer containing all expenses, income, and settings. Store this file safely.</li>
+                           <li><b>Restoring a Backup:</b> Use the "Import Data" button on the same tab. This will **ADD** the data from the file to your current household. It does not overwrite or delete existing data.</li>
+                           <li><b>Using the Local Version (Future):</b> A local-only <code>troshko_potrosko_local.html</code> file may be provided in the future.
+                               <ul>
+                                   <li style="margin-top: 5px;">When using this local file, there is **NO** cloud sync. Data is stored only in your browser.</li>
+                                   <li>This means data can be lost if you clear your browser's cache. You **must** use the "Export Data" feature regularly to keep your data safe.</li>
+                               </ul>
+                           </li>
+                       </ul>
+
+                       <h4>Keyboard Shortcuts</h4>
+                       <p>Use these keys to navigate quickly when not in a text field.</p>
+                       <ul>
+                           <li><code>N</code> - Add a <b>N</b>ew expense</li>
+                           <li><code>F</code> - <b>F</b>ind (focus the search bar)</li>
+                           <li><code>H</code> - Open this <b>H</b>elp tab</li>
+                           <li><code>Q, W, E, R, T, Y, A, S, D</code> - Switch to the corresponding main tab</li>
+                       </ul>
+                   </div>
+               </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="itemModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <h2 id="modalTitle">Add New Expense</h2>
+            <form id="itemForm">
+                <div class="form-group"><label for="itemName">Item Name</label><input type="text" id="itemName" list="item-names-list" required></div>
+                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+                    <div class="form-group"><label for="itemPrice">Price (€)</label><input type="number" id="itemPrice" step="0.01" min="0" required></div>
+                    <div class="form-group"><label for="itemQuantity">Quantity</label><input type="text" id="itemQuantity" placeholder="e.g., 2kg, 3 kom"></div>
+                </div>
+                <div class="form-group"><label for="mainCategory">Main Category</label><select id="mainCategory" onchange="updateSubCategories(this.value, 'subCategory')" required><option value="">Select Category</option><option value="__custom__">+ Add New Category</option></select><div id="customCategoryInput" class="custom-input"><input type="text" id="newMainCategory" placeholder="Enter new category name"></div></div>
+                <div class="form-group"><label for="subCategory">Sub Category</label><select id="subCategory" required><option value="">Select Sub Category</option><option value="__custom__">+ Add New Sub Category</option></select><div id="customSubCategoryInput" class="custom-input"><input type="text" id="newSubCategory" placeholder="Enter new sub category name"></div></div>
+                <div class="form-group"><label for="itemStore">Store</label><select id="itemStore" onchange="handleCustomSelect(this.value, 'customStoreInput')" required><option value="">Select Store</option><option value="__custom__">+ Add New Store</option></select><div id="customStoreInput" class="custom-input"><input type="text" id="newItemStore" placeholder="Enter new store name"></div></div>
+                <div class="form-group"><label for="itemDate">Date</label><input type="date" id="itemDate" required></div>
+                <div class="form-group checkbox-group"><input type="checkbox" id="itemIsRecurring"><label for="itemIsRecurring">Recurring Expense (monthly)</label></div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('itemModal')">Cancel</button>
+                    <button type="button" id="saveAndAddAnotherBtn" class="btn btn-secondary">Save & Add Another</button>
+                    <button type="submit" class="btn btn-primary">Save Expense</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div id="bulkEditModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <h2>Bulk Edit Expenses</h2>
+            <p style="color: var(--text-light); margin-bottom: 20px;">Changes will apply to <span id="bulkEditCount">0</span> selected items.</p>
+            <form id="bulkEditForm">
+                <div class="form-group"><label for="bulkEditMainCategory">Main Category</label><select id="bulkEditMainCategory" onchange="updateSubCategories(this.value, 'bulkEditSubCategory')"><option value="">Leave unchanged</option><option value="__custom__">+ Add New Category</option></select><div id="bulkEditCustomCategoryInput" class="custom-input"><input type="text" id="bulkEditNewMainCategory" placeholder="Enter new category name"></div></div>
+                <div class="form-group"><label for="bulkEditSubCategory">Sub Category</label><select id="bulkEditSubCategory"><option value="">Leave unchanged</option><option value="__custom__">+ Add New Sub Category</option></select><div id="bulkEditCustomSubCategoryInput" class="custom-input"><input type="text" id="bulkEditNewSubCategory" placeholder="Enter new sub category name"></div></div>
+                <div class="form-group"><label for="bulkEditStore">Store</label><select id="bulkEditStore"><option value="">Leave unchanged</option></select></div>
+                <div class="form-group"><label for="bulkEditDate">Date</label><input type="date" id="bulkEditDate"></div>
+                <div class="form-actions"><button type="button" class="btn btn-secondary" onclick="closeModal('bulkEditModal')">Cancel</button><button type="submit" class="btn btn-primary">Apply Changes</button></div>
+            </form>
+        </div>
+    </div>
+    <div id="receiptModal" class="modal">
+        <div class="modal-content">
+            <h2>📄 Parse Receipt with AI</h2>
+            <p style="color: var(--text-light); margin-bottom: 20px;">Use your AI assistant to do the hard work of reading your receipt image.</p>
+            <div class="modal-scroll-content">
+                 <div class="form-group">
+                    <label>Step 0: For Monthly Bills (Optional)</label>
+                    <p style="font-size: 0.8rem; color: var(--text-light); margin-bottom: 8px;">Click this button to pre-fill the text box with a template for common monthly bills. **You will need to manually enter the correct amounts for each bill** (e.g., change `"price": 0.00`) before clicking 'Import Items'.</p>
+                     <button type="button" class="btn btn-secondary" style="width:100%" onclick="useMonthlyBillsTemplate()">🧾 Use Monthly Bills Template</button>
+                </div>
+                <div class="form-group">
+                    <label>Step 1: Generate Prompt & Open AI Studio</label>
+                    <p style="font-size: 0.8rem; color: var(--text-light); margin-bottom: 8px;">Click the button below. This will copy a prompt to your clipboard and open the AI Studio in a new tab. In the AI Studio, you can paste the prompt and upload your receipt image (e.g., `JPG`, `PNG`) or `PDF` from your device or Google Drive.</p>
+                     <button type="button" class="btn btn-secondary" style="width:100%" onclick="generateAIPrompt()">📋 Generate Prompt & Open AI Studio</button>
+                </div>
+                <div class="form-group">
+                    <label for="receiptCode">Step 2: Paste AI's JSON Response Here</label>
+                    <p style="font-size: 0.8rem; color: var(--text-light); margin-bottom: 8px;">The AI will give you a JSON object. Copy it and paste it into the box below.</p>
+                    <textarea id="receiptCode" rows="10" style="font-family: 'Courier New', monospace; font-size: 12px;" placeholder="Paste the AI's JSON response here."></textarea>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('receiptModal')">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="executeReceiptCode()">Step 3: Import Items</button>
+                <button type="button" class="btn btn-secondary" onclick="showReceiptSample()">Show Sample Output</button>
+            </div>
+        </div>
+    </div>
+    <div id="chartExclusionModal" class="modal">
+        <div class="modal-content" style="display: flex; flex-direction: column; height: 90%; max-height: 800px;">
+            <h2>⚙️ Configure Charts</h2>
+            <p style="color: var(--text-light); margin-bottom: 20px; flex-shrink: 0;">Check items to exclude them from all charts.</p>
+            <div id="exclusionModalTabs" class="modal-tabs" style="flex-shrink: 0;">
+                <button class="modal-tab-btn active" onclick="switchModalTab(this, 'exclCatPane')">Categories</button>
+                <button class="modal-tab-btn" onclick="switchModalTab(this, 'exclSubCatPane')">Sub-Categories</button>
+                <button class="modal-tab-btn" onclick="switchModalTab(this, 'exclStorePane')">Stores</button>
+            </div>
+            <div class="form-group" style="margin-bottom: 20px; flex-shrink: 0;">
+                <input type="text" id="chartExclusionSearch" oninput="filterExclusionCheckboxes('chart')" placeholder="🔎 Search to filter lists...">
+            </div>
+            <div class="modal-scroll-content" style="flex-grow: 1;">
+                <div id="exclCatPane" class="modal-tab-pane active"><div class="checkbox-list" id="exclusionCategoriesList"></div></div>
+                <div id="exclSubCatPane" class="modal-tab-pane"><div class="checkbox-list" id="exclusionSubCategoriesList"></div></div>
+                <div id="exclStorePane" class="modal-tab-pane"><div class="checkbox-list" id="exclusionStoresList"></div></div>
+            </div>
+            <div class="form-actions" style="flex-shrink: 0;">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('chartExclusionModal')">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveChartExclusions()">Save Settings</button>
+            </div>
+        </div>
+    </div>
+    <div id="topSpendersExclusionModal" class="modal">
+        <div class="modal-content" style="display: flex; flex-direction: column; height: 90%; max-height: 800px;">
+            <h2>⚙️ Configure Top Spenders</h2>
+            <p style="color: var(--text-light); margin-bottom: 20px; flex-shrink: 0;">Check items to exclude them from the Top Spenders list.</p>
+            <div id="tsExclusionModalTabs" class="modal-tabs" style="flex-shrink: 0;">
+                <button class="modal-tab-btn active" onclick="switchModalTab(this, 'tsExclCatPane')">Categories</button>
+                <button class="modal-tab-btn" onclick="switchModalTab(this, 'tsExclSubCatPane')">Sub-Categories</button>
+                <button class="modal-tab-btn" onclick="switchModalTab(this, 'tsExclStorePane')">Stores</button>
+            </div>
+             <div class="form-group" style="margin-bottom: 20px; flex-shrink: 0;">
+                <input type="text" id="tsExclusionSearch" oninput="filterExclusionCheckboxes('ts')" placeholder="🔎 Search to filter lists...">
+            </div>
+            <div class="modal-scroll-content" style="flex-grow: 1;">
+                <div id="tsExclCatPane" class="modal-tab-pane active"><div class="checkbox-list" id="tsExclusionCategoriesList"></div></div>
+                <div id="tsExclSubCatPane" class="modal-tab-pane"><div class="checkbox-list" id="tsExclusionSubCategoriesList"></div></div>
+                <div id="tsExclStorePane" class="modal-tab-pane"><div class="checkbox-list" id="tsExclusionStoresList"></div></div>
+            </div>
+            <div class="form-actions" style="flex-shrink: 0;">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('topSpendersExclusionModal')">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveTopSpendersExclusions()">Save Settings</button>
+            </div>
+        </div>
+    </div>
+    <div id="createSubCategoryModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <h2>Create New Sub-Category</h2>
+            <form id="createSubCategoryForm">
+                <div class="form-group">
+                    <label for="newManagedSubCategoryName">New Sub-Category Name</label>
+                    <input type="text" id="newManagedSubCategoryName" required>
+                </div>
+                <div class="form-group">
+                    <label for="parentCategorySelect">Parent Category</label>
+                    <select id="parentCategorySelect" required></select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('createSubCategoryModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Sub-Category</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div id="inviteModal" class="modal">
+        <div class="modal-content" style="max-width: 450px;">
+            <h2>Invite New Member</h2>
+            <p style="color: var(--text-light); margin-bottom: 20px;">Enter the Google email address of the person you want to invite to your household. They will get access after they log in.</p>
+            <form id="inviteForm">
+                <div class="form-group">
+                    <label for="inviteEmail">Email Address</label>
+                    <input type="email" id="inviteEmail" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('inviteModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Send Invite</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- NEW MODAL FOR CREATING A HOUSEHOLD -->
+    <div id="createHouseholdModal" class="modal">
+        <div class="modal-content" style="max-width: 450px;">
+            <h2>Welcome to Troško Potroško!</h2>
+            <p style="color: var(--text-light); margin-bottom: 20px;">
+                It looks like you're new here. Let's create your first household to start tracking expenses.
+            </p>
+            <form id="createHouseholdForm">
+                <div class="form-group">
+                    <label for="householdName">Household Name</label>
+                    <input type="text" id="householdName" placeholder="e.g., The Smith Family" required>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Create Household</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <datalist id="item-names-list"></datalist>
+
+    <script>
+    // --- SCRIPT START ---
+    
+    // --- FIREBASE CONFIGURATION ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyADHFkhDpff4OFLfxb5WF3yzgq7DfYIeic", // From your original file
+      authDomain: "troshkopotroshko.firebaseapp.com",
+      projectId: "troshkopotroshko",
+      storageBucket: "troshkopotroshko.firebasestorage.app",
+      messagingSenderId: "618260255495",
+      appId: "1:618260255495:web:7ec7ebff552859d7c12ba2",
+      measurementId: "G-94W10KXPSD"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const firestore = firebase.firestore();
+
+    // --- State variables (NO ADMIN-SPECIFIC ONES) ---
+    let currentUser = null;
+    let activeHousehold = null; 
+    let allExpenses = [];
+    let allIncomes = [];
+    let allHouseholdMembers = {};
+    let filteredExpenses = [];
+    let editingId = null;
+    let currentView = 'list';
+    let expenseLayout = 'grid';
+    let selectedExpenses = new Set();
+    let chartCache = { key: null, data: null };
+    let previousFilterState = null;
+    let themeToggleBtn;
+    let comparisonGroupBy = 'category';
+    let comparisonViewMode = 'table';
+    let comparisonSortBy = 'percentageChange';
+    let comparisonSortDir = 'desc';
+    let lastUsedDetails = { category: '', store: '' };
+    let isInitialLoad = true;
+
+    // Default data (merged with household data on load)
+    let stores = [ 'Konzum', 'Lidl', 'Spar', 'Kaufland', 'Plodine', 'Tommy', 'dm', 'Muller', 'BIPA', 'INA', 'Petrol', 'Crodux', 'Lukoil', 'Tifon', 'Ikea', 'Lesnina XXXL', 'Emmezeta', 'Jysk', 'Pevex', 'Sancta Domenica', 'Links', 'Instar Informatika', 'Decathlon', 'Intersport', 'Kiosk (Tisak, iNovine)', 'Pekara', 'Restoran', 'Kafić', 'Online Trgovina', 'Tržnica', 'Ljekarna', 'Servis (Auto, Kućanski, itd.)', 'HEP', 'Ostalo' ].sort();
+    let categories = {
+        'Prehrana i Namirnice 🍔': { subcategories: ['Voće', 'Povrće', 'Meso i Riba', 'Mliječni Proizvodi i Jaja', 'Pekarski Proizvodi', 'Smrznuta Hrana', 'Slatkiši i Grickalice', 'Pića (za doma)', 'Začini i Umaci', 'Gotova Jela i Poluproizvodi', 'Ostalo']},
+        'Stanovanje 🏠': { subcategories: ['Najamnina', 'Rata Kredita (Stan)', 'Pričuva', 'Porez na Nekretnine', 'Osiguranje Doma', 'Popravci i Održavanje Doma', 'Ostalo']},
+        'Režije 💡': { subcategories: ['Struja', 'Voda', 'Plin/Grijanje', 'Odvoz Smeća', 'Internet', 'Mobilna Telefonija', 'Fiksna Telefonija', 'TV Usluge (Kabelska, IPTV)', 'Ostalo']},
+        'Prijevoz 🚗': { subcategories: ['Gorivo', 'Javni Prijevoz (Bus, Tramvaj, Vlak)', 'Taksi/Prijevoz na Zahtjev', 'Održavanje Vozila (Servis, Dijelovi)', 'Registracija i Osiguranje Vozila', 'Parking', 'Cestarine', 'Kupnja/Leasing Vozila', 'Bicikl (Oprema, Popravci)', 'Ostalo']},
+        'Zdravlje i Osobna Njega ⚕️': { subcategories: ['Lijekovi i Ljekarnički Proizvodi', 'Liječničke Usluge (Opća praksa, Specijalisti)', 'Stomatološke Usluge', 'Kozmetika i Higijenski Proizvodi', 'Frizerske/Kozmetičke Usluge (Salon)', 'Fitness/Teretana/Sportski Klubovi', 'Naočale/Leće', 'Ostalo']},
+        'Odjeća i Obuća 👕': { subcategories: ['Odjeća (Svakodnevna)', 'Obuća (Svakodnevna)', 'Sportska Odjeća i Obuća', 'Modni Dodaci (Torbe, Nakit, Remeni)', 'Donje Rublje i Čarape', 'Popravci Odjeće/Obuće', 'Ostalo']},
+        'Kućanstvo i Oprema 🛋️': { subcategories: ['Namještaj', 'Kućanski Aparati (Veliki i Mali)', 'Dekoracije i Tekstil za Dom', 'Sredstva za Čišćenje', 'Kuhinjsko Posuđe i Pribor', 'Alati i Oprema za Popravke', 'Vrt/Balkon (Biljke, Oprema)', 'Posteljina i Ručnici', 'Sitni Kućanski Popravci (Materijal)', 'Ostalo']},
+        'Djeca 👶': { subcategories: ['Pelene i Dječje Potrepštine', 'Igračke i Zabava', 'Školarina i Vrtić', 'Izvanškolske Aktivnosti', 'Oprema', 'Zdravlje i Njega', 'Džeparac/Štednja', 'Ostalo']},
+        'Kućni ljubimci 🐾': { subcategories: ['Hrana i Poslastice', 'Veterinarske Usluge', 'Lijekovi i Suplementi', 'Oprema i Igračke', 'Njega i Higijena', 'Čuvanje Ljubimca', 'Ostalo']},
+        'Restorani i Zabava 🎉': { subcategories: ['Restorani (Obroci vani)', 'Kafići/Barovi (Pića vani)', 'Brza Hrana/Dostava', 'Kino/Kazalište/Koncerti/Događanja', 'Knjige/Časopisi/Stripovi', 'Igre (Video, Društvene)', 'Hobiji/Kreativne Aktivnosti (Materijal, Tečajevi)', 'Sport/Rekreacija (Ulaznice, Članarine)', 'Digitalne Pretplante (Streaming, Glazba, Igre)', 'Izlasci (Općenito)', 'Putovanja (Vikend/Jednodnevni Izleti)', 'Ostalo']},
+        'Putovanja (Višednevna) ✈️': { subcategories: ['Smještaj (Hoteli, Apartmani)', 'Prijevoz (Avion, Vlak, Bus - putovanja)', 'Aktivnosti/Izleti/Ulaznice na Putovanju', 'Putno Osiguranje', 'Vize', 'Suveniri', 'Hrana i Piće na Putovanju (specifično za put)', 'Ostalo']},
+        'Financije 💰': { subcategories: ['Štednja (Planirana)', 'Ulaganja (Dionice, Kripto, Fondovi)', 'Otplata Kredita/Dugova (osim stambenog)', 'Bankarske Naknade i Usluge', 'Osiguranja (Životno, Nezaposlenost, itd.)', 'Financijsko Savjetovanje', 'Gotovina', 'Ostalo']},
+        'Obrazovanje 📚': { subcategories: ['Školarine/Upisnine (Fakultet, Škola)', 'Tečajevi/Radionice/Seminari', 'Knjige i Materijali za Učenje', 'Stručne Konferencije', 'Online Tečajevi/Platforme', 'Ostalo']},
+        'Pokloni i Donacije 🎁': { subcategories: ['Pokloni (Kupljeni)', 'Donacije (Dobrotvorne Svrhe)', 'Ostalo']},
+        'Posao i Profesionalni Razvoj 💼': { subcategories: ['Uredski Materijal i Oprema', 'Poslovna Putovanja (specifično za posao)', 'Softver/Alati/Pretplata (poslovne)', 'Marketing i Oglašavanje', 'Članarine (strukovne udruge)', 'Reprezentacija', 'Ostalo']},
+        'Ostalo/Nekategorizirano 📎': { subcategories: ['Razni Sitni Troškovi', 'Nepredviđeni Troškovi', 'Kazne/Pristojbe (ne-auto)', 'Naknade za Usluge (Pošta, Javni Bilježnik)', 'Ostalo']}
+    };
+    Object.values(categories).forEach(cat => cat.subcategories = [...new Set(cat.subcategories)].sort((a,b) => a.localeCompare(b)));
+    let chartExclusions = { stores: new Set(), categories: new Set(), subcategories: new Set() };
+    let topSpendersExclusions = { stores: new Set(), categories: new Set(), subcategories: new Set() };
+    
+    // --- Listener variables ---
+    let householdUnsubscribe = null;
+    let expensesUnsubscribe = null;
+    let incomeUnsubscribe = null;
+    let chartInstances = {};
+
+    Chart.register(ChartDataLabels);
+    const doughnutText = { id: 'doughnutText', afterDraw(chart, args, options) { if (chart.config.type !== 'doughnut') return; const { ctx, data } = chart; const { top, bottom, left, right, width, height } = chart.chartArea; const x = left + width / 2; const y = top + height / 2; const total = data.datasets[0].data.reduce((a, b) => a + b, 0); if (total === 0) return; ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const fontFamily = getComputedStyle(document.documentElement).getPropertyValue('--font-family'); ctx.font = `700 24px ${fontFamily}`; ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-light').trim(); ctx.fillText('Total', x, y - 40); const totalText = formatCurrency(total, true); let fontSize = 72; if (totalText.length > 6) fontSize = 60; if (totalText.length > 8) fontSize = 48; if (totalText.length > 10) fontSize = 40; ctx.font = `800 ${fontSize}px ${fontFamily}`; ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--danger').trim(); if (document.body.classList.contains('dark-mode')) { ctx.shadowColor = 'rgba(255, 255, 255, 0.2)'; ctx.shadowBlur = 8; } ctx.fillText(totalText, x, y + 40); ctx.restore(); } };
+    Chart.register(doughnutText);
+    
+    const THEME_STORAGE_KEY = 'expense_flow_theme_v1';
+    function applyTheme(theme) { if (theme === 'dark') { document.body.classList.add('dark-mode'); themeToggleBtn.textContent = '☀️'; Chart.defaults.color = '#9e9e9e'; Chart.defaults.borderColor = '#424242'; } else { document.body.classList.remove('dark-mode'); themeToggleBtn.textContent = '🌙'; Chart.defaults.color = '#2c3e50'; Chart.defaults.borderColor = '#e0e6ed'; } chartCache.key = null; renderActiveTabContent(); }
+    function toggleTheme() { const currentTheme = document.body.classList.contains('dark-mode') ? 'light' : 'dark'; localStorage.setItem(THEME_STORAGE_KEY, currentTheme); applyTheme(currentTheme); }
+    function applyInitialTheme() { const savedTheme = localStorage.getItem(THEME_STORAGE_KEY); const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches; applyTheme(savedTheme || (systemPrefersDark ? 'dark' : 'light')); }
+
+    function getHouseholdDocRef() { return activeHousehold ? firestore.collection('groups').doc(activeHousehold.id) : null; }
+    function getExpensesCollectionRef() { const householdDocRef = getHouseholdDocRef(); return householdDocRef ? householdDocRef.collection('expenses') : null; }
+    function getIncomeCollectionRef() { const householdDocRef = getHouseholdDocRef(); return householdDocRef ? householdDocRef.collection('income') : null; }
+
+    auth.onAuthStateChanged(async user => {
+        if (user) {
+            currentUser = user;
+            const userRef = firestore.collection('users').doc(user.uid);
+            await userRef.set({
+                displayName: user.displayName,
+                email: user.email,
+                photoURL: user.photoURL
+            }, { merge: true });
+
+            document.getElementById('login-container').classList.add('hidden');
+            document.getElementById('loading-container').classList.remove('hidden');
+            await findAndLoadHousehold(user.uid);
+        } else {
+            cleanupAfterLogout();
+        }
+    });
+
+    // SIMPLIFIED LOGIN FLOW FOR REGULAR USERS
+    async function findAndLoadHousehold(uid) {
+        try {
+            // Step 1: Check if the user is ALREADY a member of a household.
+            const membershipQuery = await firestore.collection('groups').where('members', 'array-contains', uid).limit(1).get();
+            if (!membershipQuery.empty) {
+                initializeAppDataForHousehold(membershipQuery.docs[0]);
+                return;
+            }
+
+            // Step 2: If not a member, check for a pending invitation.
+            const inviteRef = firestore.collection('invitations').doc(currentUser.email.toLowerCase());
+            const inviteDoc = await inviteRef.get();
+
+            if (inviteDoc.exists) {
+                // User has an invitation. Accept it.
+                const inviteData = inviteDoc.data();
+                const householdRef = firestore.collection('groups').doc(inviteData.householdId);
+                
+                const batch = firestore.batch();
+                batch.update(householdRef, { members: firebase.firestore.FieldValue.arrayUnion(uid) });
+                batch.delete(inviteRef);
+                await batch.commit();
+
+                // Reload to initialize the app.
+                const householdDoc = await householdRef.get();
+                if (householdDoc.exists) {
+                    initializeAppDataForHousehold(householdDoc);
+                    return;
+                }
+            }
+            
+            // Step 3: If no membership and no invite, they are a new user.
+            document.getElementById('loading-container').classList.add('hidden');
+            document.getElementById('createHouseholdModal').style.display = 'flex';
+            document.getElementById('householdName').focus();
+
+        } catch (error) {
+            console.error("Critical error during login flow:", error);
+            const loadingContainer = document.getElementById('loading-container');
+            loadingContainer.innerHTML = `<h1>Error</h1><p>Could not load your data. Please check your internet connection and try again.</p><button class="btn btn-danger" onclick="signOut()">Sign Out</button>`;
+        }
+    }
+    
+    function initializeAppDataForHousehold(householdDoc) {
+        householdUnsubscribe = householdDoc.ref.onSnapshot(async (doc) => {
+            activeHousehold = { id: doc.id, ...doc.data() };
+            const savedData = doc.data() || {};
+            categories = { ...categories, ...(savedData.categories || {}) };
+            stores = [...new Set([...stores, ...(savedData.stores || [])])].sort();
+            chartExclusions = {
+                stores: new Set(savedData.chartExclusions?.stores || []),
+                categories: new Set(savedData.chartExclusions?.categories || []),
+                subcategories: new Set(savedData.chartExclusions?.subcategories || [])
+            };
+            topSpendersExclusions = {
+                stores: new Set(savedData.topSpendersExclusions?.stores || []),
+                categories: new Set(savedData.topSpendersExclusions?.categories || []),
+                subcategories: new Set(savedData.topSpendersExclusions?.subcategories || [])
+            };
+            document.getElementById('household-title').textContent = activeHousehold.name || 'Household Budget';
+
+            if (activeHousehold.members && activeHousehold.members.length > 0) {
+                const memberPromises = activeHousehold.members.map(uid => 
+                    firestore.collection('users').doc(uid).get().catch(() => null)
+                );
+                const memberDocs = await Promise.all(memberPromises);
+                allHouseholdMembers = {};
+                memberDocs.forEach(memberDoc => {
+                    if (memberDoc && memberDoc.exists) {
+                        allHouseholdMembers[memberDoc.id] = memberDoc.data();
+                    }
+                });
+            }
+
+            populateAllFilterDropdowns();
+            populateExclusionModal('chart');
+            populateExclusionModal('ts');
+            checkBackupReminder();
+            renderHouseholdManagement();
+        });
+
+        expensesUnsubscribe = householdDoc.ref.collection('expenses').onSnapshot(snapshot => {
+            allExpenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            if (isInitialLoad) {
+                refreshDataAndRenderAll(true);
+                isInitialLoad = false;
+            } else {
+                refreshDataAndRenderAll(false);
+            }
+            handleRecurringExpenses();
+        });
+
+        incomeUnsubscribe = householdDoc.ref.collection('income').onSnapshot(snapshot => {
+            allIncomes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            populateIncomeForm();
+            renderSavingsAnalysis();
+        });
+
+        document.getElementById('loading-container').classList.add('hidden');
+        document.getElementById('app-container').classList.remove('hidden');
+        const profileContainer = document.getElementById('user-profile-container');
+        profileContainer.innerHTML = `<img src="${currentUser.photoURL}" alt="User photo"><div class="user-profile-info"><div class="name">${currentUser.displayName}</div><div class="email">${currentUser.email}</div></div><button class="btn-logout" title="Sign Out" onclick="signOut()">🚪</button>`;
+    }
+
+    function cleanupAfterLogout() {
+        if (householdUnsubscribe) householdUnsubscribe();
+        if (expensesUnsubscribe) expensesUnsubscribe();
+        if (incomeUnsubscribe) incomeUnsubscribe();
+        currentUser = null; activeHousehold = null; allExpenses = []; allIncomes = [];
+        filteredExpenses = []; selectedExpenses.clear(); chartCache.key = null;
+        isInitialLoad = true;
+        document.getElementById('user-profile-container').innerHTML = '';
+        document.getElementById('app-container').classList.add('hidden');
+        document.getElementById('loading-container').classList.add('hidden');
+        document.getElementById('login-container').classList.remove('hidden');
+        updateDisplay();
+    }
+    
+    function signInWithGoogle() {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        auth.signInWithPopup(provider).catch(error => { console.error("Sign-in error", error); alert("Could not sign in. Please try again. " + error.message); });
+    }
+
+    function signOut() { if (confirm("Are you sure you want to sign out?")) { auth.signOut(); } }
+
+    function refreshDataAndRenderAll(setInitialFilters = false) {
+        showSaveStatus('saving'); chartCache.key = null;
+        populateAllFilterDropdowns(); populateItemNamesDatalist();
+        applyFilters(setInitialFilters); showSaveStatus('saved');
+    }
+
+    // THIS IS THE CORRECTED FUNCTION TO PREVENT THE LOOP
+    async function handleCreateHousehold(event) {
+        event.preventDefault(); // This is the most important line. It stops the page reload.
+        if (!currentUser) return;
+
+        const householdName = document.getElementById('householdName').value.trim();
+        if (!householdName) {
+            alert("Please enter a name for your household.");
+            return;
+        }
+
+        showSaveStatus('saving');
+        try {
+            // Create the new household document in Firestore
+            const docRef = await firestore.collection('groups').add({
+                name: householdName,
+                members: [currentUser.uid],
+                owner: currentUser.uid,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                categories: categories, 
+                stores: stores
+            });
+
+            // Now, directly use the document we just created to initialize the app.
+            // This avoids re-running the login check and prevents the race condition.
+            closeModal('createHouseholdModal');
+            document.getElementById('loading-container').classList.remove('hidden');
+
+            const newHouseholdDoc = await docRef.get();
+
+            initializeAppDataForHousehold(newHouseholdDoc);
+            
+            showSaveStatus('saved');
+        } catch (error) {
+            console.error("Error creating household:", error);
+            alert("Could not create household. Please check your security rules and try again.");
+            showSaveStatus('error');
+        }
+    }
+
+    // UPDATED: This function now writes to the top-level 'invitations' collection
+    async function handleInviteForm(event) {
+        event.preventDefault();
+        if (!activeHousehold) {
+            alert("Could not send invite: No active household is selected.");
+            return;
+        }
+        const email = document.getElementById('inviteEmail').value.trim().toLowerCase();
+        if (!email) {
+            alert("Please enter a valid email address.");
+            return;
+        }
+        showSaveStatus('saving');
+        try {
+            const inviteRef = firestore.collection('invitations').doc(email);
+            const doc = await inviteRef.get();
+            if (doc.exists) {
+                alert("An invitation has already been sent to this email address.");
+                showSaveStatus('saved');
+                return;
+            }
+
+            await inviteRef.set({
+                householdId: activeHousehold.id,
+                householdName: activeHousehold.name,
+                invitedBy: currentUser.uid,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            
+            showSaveStatus('saved');
+            alert(`Invitation sent to ${email}!`);
+            closeModal('inviteModal');
+            renderPendingInvites();
+        } catch (error) {
+            console.error("Error sending invite:", error);
+            alert("Could not send invitation. Please check your security rules and try again.");
+            showSaveStatus('error');
+        }
+    }
+
+    // UPDATED: Queries the top-level 'invitations' collection for the current household
+    async function renderPendingInvites() { 
+        if (!activeHousehold) return; 
+        const container = document.getElementById('pendingInvitesContainer'); 
+        container.innerHTML = '<div class="empty-state" style="padding: 20px;">Loading invites...</div>'; 
+        try { 
+            const invitesCollection = firestore.collection('invitations');
+            const snapshot = await invitesCollection.where('householdId', '==', activeHousehold.id).orderBy('createdAt', 'desc').get();
+            if (snapshot.empty) { 
+                container.innerHTML = '<div class="empty-state" style="padding: 20px;">No pending invitations.</div>'; 
+                return; 
+            } 
+            let html = '<table class="management-table"><thead><tr><th>Invited Email</th><th>Date Sent</th><th style="text-align: right;">Action</th></tr></thead><tbody>'; 
+            snapshot.forEach(doc => { 
+                const inviteId = doc.id; // The email is the ID
+                const invite = doc.data(); 
+                const inviteDate = invite.createdAt ? new Date(invite.createdAt.seconds * 1000).toLocaleDateString() : 'N/A'; 
+                html += `<tr><td>${inviteId}</td><td>${inviteDate}</td><td style="text-align: right;"><button class="btn-icon btn-danger" title="Revoke Invitation" onclick="revokeInvite('${inviteId}')">🗑️</button></td></tr>`; 
+            }); 
+            html += '</tbody></table>'; 
+            container.innerHTML = html; 
+        } catch (error) { 
+            console.error("Error fetching pending invites:", error); 
+            container.innerHTML = '<div class="empty-state error" style="padding: 20px;">Could not load invitations.</div>'; 
+        } 
+    }
+
+    // UPDATED: Deletes from the top-level 'invitations' collection
+    async function revokeInvite(inviteId) { 
+        if (!activeHousehold || !inviteId) return; 
+        if (confirm("Are you sure you want to revoke this invitation?")) { 
+            showSaveStatus('saving'); 
+            try { 
+                const inviteRef = firestore.collection('invitations').doc(inviteId); 
+                await inviteRef.delete(); 
+                showSaveStatus('saved'); 
+                alert("Invitation revoked successfully."); 
+                renderPendingInvites(); 
+            } catch (error) { 
+                console.error("Error revoking invite:", error); 
+                showSaveStatus('error'); 
+                alert("Could not revoke the invitation. Please try again."); 
+            } 
+        } 
+    }
+    
+    // --- All other app functions (addOrUpdateItem, rendering, etc.) remain the same ---
+    // [The long block of remaining functions from your original file goes here]
+    async function addOrUpdateItem(event, keepModalOpen = false) {
+        if(event) event.preventDefault();
+        showSaveStatus('saving');
+        let mainCategoryName = document.getElementById('mainCategory').value; if (mainCategoryName === '__custom__') mainCategoryName = document.getElementById('newMainCategory').value.trim();
+        let subCategoryName = document.getElementById('subCategory').value; if (subCategoryName === '__custom__') subCategoryName = document.getElementById('newSubCategory').value.trim();
+        let storeName = document.getElementById('itemStore').value; if (storeName === '__custom__') storeName = document.getElementById('newItemStore').value.trim();
+        if (!mainCategoryName || !subCategoryName || !storeName) { alert('Please provide valid category, sub-category, and store names.'); showSaveStatus('saved'); return; }
+        let householdMetaUpdated = false;
+        if (!categories[mainCategoryName]) { categories[mainCategoryName] = { subcategories: [] }; householdMetaUpdated = true; }
+        if (!categories[mainCategoryName].subcategories.includes(subCategoryName)) { categories[mainCategoryName].subcategories.push(subCategoryName); categories[mainCategoryName].subcategories.sort((a, b) => a.localeCompare(b)); householdMetaUpdated = true; }
+        if(!stores.includes(storeName)) { stores.push(storeName); stores.sort(); householdMetaUpdated = true; }
+        if (householdMetaUpdated) { await getHouseholdDocRef().set({ categories: categories, stores: stores }, { merge: true }); }
+        const formData = {
+            name: document.getElementById('itemName').value, price: parseFloat(document.getElementById('itemPrice').value),
+            quantity: document.getElementById('itemQuantity').value.trim(),
+            store: storeName, date: document.getElementById('itemDate').value, category: mainCategoryName, subCategory: subCategoryName,
+            isRecurring: document.getElementById('itemIsRecurring').checked, sourceRecurringId: null, createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            lastModifiedBy: currentUser.uid
+        };
+        lastUsedDetails.category = formData.category; lastUsedDetails.store = formData.store;
+        try {
+            const expensesCollection = getExpensesCollectionRef(); if (!expensesCollection) throw new Error("No active household selected.");
+            if (editingId) {
+                const originalItem = allExpenses.find(e => e.id === editingId); formData.sourceRecurringId = originalItem?.sourceRecurringId || null;
+                await expensesCollection.doc(editingId).update(formData);
+            } else {
+                const docRef = await expensesCollection.add(formData); if (formData.isRecurring) { await docRef.update({ sourceRecurringId: docRef.id }); }
+            }
+            showSaveStatus('saved');
+        } catch (error) { console.error("Error saving item:", error); showSaveStatus('error'); alert("Error saving item: " + error.message); return; }
+        if (keepModalOpen) { document.getElementById('itemForm').reset(); document.getElementById('mainCategory').value = formData.category; updateSubCategories(formData.category, 'subCategory'); document.getElementById('itemStore').value = formData.store; document.getElementById('itemDate').valueAsDate = new Date(); document.getElementById('itemName').focus(); } else { closeModal('itemModal'); }
+    }
+    async function deleteItem(id) { if (!activeHousehold) return; if (confirm('Are you sure you want to delete this expense?')) { showSaveStatus('saving'); try { await getExpensesCollectionRef().doc(id).delete(); selectedExpenses.delete(id); } catch (error) { console.error("Error deleting item:", error); alert("Error deleting item: " + error.message); } finally { showSaveStatus('saved'); } } }
+    async function deleteSelectedItems() { if (selectedExpenses.size === 0) { alert('No items selected for deletion.'); return; } if (!confirm(`Are you sure you want to delete ${selectedExpenses.size} selected items?`)) { return; } showSaveStatus('saving'); const batch = firestore.batch(); const expensesCollection = getExpensesCollectionRef(); selectedExpenses.forEach(id => batch.delete(expensesCollection.doc(id))); try { await batch.commit(); selectedExpenses.clear(); showSaveStatus('saved'); } catch (error) { console.error("Error deleting selected items:", error); alert("Error deleting selected items: " + error.message); } }
+    async function clearAllData() { if (!activeHousehold) return; if (confirm('Clear ALL data for this household? This includes all expenses, income, and settings. This cannot be undone.')) { showSaveStatus('saving'); try { const expensesSnapshot = await getExpensesCollectionRef().get(); const expBatch = firestore.batch(); expensesSnapshot.docs.forEach(doc => expBatch.delete(doc.ref)); await expBatch.commit(); const incomeSnapshot = await getIncomeCollectionRef().get(); const incBatch = firestore.batch(); incomeSnapshot.docs.forEach(doc => incBatch.delete(doc.ref)); await incBatch.commit(); await getHouseholdDocRef().set({ categories: {}, stores: [], chartExclusions: { stores: [], categories: [], subcategories: [] }, topSpendersExclusions: { stores: [], categories: [], subcategories: [] } }, { merge: true }); selectedExpenses.clear(); alert("All household data cleared successfully."); } catch (error) { console.error("Error clearing data:", error); alert("Error clearing data: " + error.message); } finally { showSaveStatus('saved'); } } }
+    async function exportData() { if (!activeHousehold) return; try { showSaveStatus('saving'); const dataToExport = { expenses: allExpenses.map(({ id, ...rest }) => rest), income: allIncomes.map(({ id, ...rest }) => rest), settings: { categories: activeHousehold.categories, stores: activeHousehold.stores, chartExclusions: { stores: [...chartExclusions.stores], categories: [...chartExclusions.categories], subcategories: [...chartExclusions.subcategories] }, topSpendersExclusions: { stores: [...topSpendersExclusions.stores], categories: [...topSpendersExclusions.categories], subcategories: [...topSpendersExclusions.subcategories] } } }; const jsonString = JSON.stringify(dataToExport, null, 2); const blob = new Blob([jsonString], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; const date = new Date().toISOString().slice(0,10); a.download = `trosko_potrosko_export_${activeHousehold.name}_${date}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href); await getHouseholdDocRef().set({ lastBackupTimestamp: Date.now() }, {merge: true}); checkBackupReminder(); showSaveStatus('saved'); } catch (error) { console.error("Error exporting data:", error); alert("Failed to export data: " + error.message); } }
+    async function importData(event) {
+        const file = event.target.files[0]; if (!file) return;
+        if (!activeHousehold) { alert("No active household. Please log in."); return; }
+        const reader = new FileReader();
+        reader.onload = async e => {
+            try {
+                const importedData = JSON.parse(e.target.result);
+                if (!importedData.expenses || !Array.isArray(importedData.expenses)) {
+                    throw new Error("Invalid backup file: 'expenses' array not found or malformed.");
+                }
+
+                if (confirm(`This will ADD data from the backup file to the current household. Existing data will NOT be replaced. Continue?`)) {
+                    showSaveStatus('saving');
+                    const expensesCollection = getExpensesCollectionRef();
+                    const incomeCollection = getIncomeCollectionRef();
+                    
+                    const expBatch = firestore.batch();
+                    importedData.expenses.forEach(item => {
+                        const { id, ...expenseData } = item;
+                        expBatch.set(expensesCollection.doc(), expenseData);
+                    });
+                    await expBatch.commit();
+                    
+                    if (importedData.income && Array.isArray(importedData.income)) {
+                        const incBatch = firestore.batch();
+                        importedData.income.forEach(item => {
+                            const { id, ...incomeData } = item;
+                            const incomeDocId = `${incomeData.year}-${String(incomeData.month + 1).padStart(2, '0')}`;
+                            incBatch.set(incomeCollection.doc(incomeDocId), incomeData, { merge: true });
+                        });
+                        await incBatch.commit();
+                    }
+                    
+                    const importedSettings = importedData.settings || importedData;
+                    if (importedSettings.categories || importedSettings.stores) {
+                         const newSettings = {
+                            categories: { ...categories, ...(importedSettings.categories || {}) },
+                            stores: [...new Set([...stores, ...(importedSettings.stores || [])])].sort(),
+                        };
+                        await getHouseholdDocRef().set(newSettings, { merge: true });
+                    }
+                    
+                    showSaveStatus('saved');
+                    alert(`Import successful! Added ${importedData.expenses.length} expenses.`);
+                }
+            } catch (error) { 
+                alert('Error importing data. Invalid JSON file or network issue. See console for details.'); 
+                console.error("Import Error:", error);
+            } finally {
+                event.target.value = ''; 
+            }
+        };
+        reader.readAsText(file);
+    }
+    function renderHouseholdManagement() { if (!activeHousehold) return; renderPendingInvites(); const memberContainer = document.getElementById('householdMembersContainer'); memberContainer.innerHTML = '<div class="empty-state" style="padding: 20px;">Loading members...</div>'; let memberHtml = '<table class="management-table"><thead><tr><th>Member</th><th>Email</th></tr></thead><tbody>'; activeHousehold.members.forEach(uid => { const member = allHouseholdMembers[uid]; if (member) { memberHtml += `<tr><td>${member.displayName}</td><td>${member.email}</td></tr>`; } }); memberHtml += '</tbody></table>'; memberContainer.innerHTML = memberHtml; }
+    function processDataForCharts(filteredData, allData) { const data = { category: {}, store: {}, subCategory: {}, monthlyTrends: {}, yearlyTrends: {}, cumulativeTotalSpend: {}, }; const chartData = filteredData.filter(e => !chartExclusions.stores.has(e.store) && !chartExclusions.categories.has(e.category) && !chartExclusions.subcategories.has(e.subCategory)); const trendData = allData.filter(e => !chartExclusions.stores.has(e.store) && !chartExclusions.categories.has(e.category) && !chartExclusions.subcategories.has(e.subCategory)); const selectedYear = document.getElementById('yearFilter').value; const monthlyTrendData = selectedYear ? trendData.filter(e => e.date.startsWith(selectedYear)) : trendData; for (const item of chartData) { const catKey = item.category || 'Ostalo/Nekategorizirano 📎'; const storeKey = item.store || 'Ostalo'; const subCatKey = item.subCategory || 'N/A'; data.category[catKey] = (data.category[catKey] || 0) + item.price; data.store[storeKey] = (data.store[storeKey] || 0) + item.price; if (item.category === document.getElementById('categoryFilter').value) { data.subCategory[subCatKey] = (data.subCategory[subCatKey] || 0) + item.price; } } for (const item of monthlyTrendData) { const monthYear = formatMonthYear(item.date); const catKey = item.category || 'Ostalo/Nekategorizirano 📎'; const subCatKey = item.subCategory || 'N/A'; data.monthlyTrends[monthYear] = data.monthlyTrends[monthYear] || { byCat: {}, bySubCat: {} }; data.monthlyTrends[monthYear].byCat[catKey] = (data.monthlyTrends[monthYear].byCat[catKey] || 0) + item.price; data.monthlyTrends[monthYear].bySubCat[subCatKey] = (data.monthlyTrends[monthYear].bySubCat[subCatKey] || 0) + item.price; } for (const item of trendData) { const year = item.date.substring(0, 4); const catKey = item.category || 'Ostalo/Nekategorizirano 📎'; const subCatKey = item.subCategory || 'N/A'; data.yearlyTrends[year] = data.yearlyTrends[year] || { byCat: {}, bySubCat: {} }; data.yearlyTrends[year].byCat[catKey] = (data.yearlyTrends[year].byCat[catKey] || 0) + item.price; data.yearlyTrends[year].bySubCat[subCatKey] = (data.yearlyTrends[year].bySubCat[subCatKey] || 0) + item.price; } const monthlyTotals = {}; allData.forEach(item => { const monthKey = item.date.substring(0, 7); monthlyTotals[monthKey] = (monthlyTotals[monthKey] || 0) + item.price; }); const sortedMonthKeys = Object.keys(monthlyTotals).sort(); let cumulativeTotal = 0; sortedMonthKeys.forEach(key => { cumulativeTotal += monthlyTotals[key]; data.cumulativeTotalSpend[key] = cumulativeTotal; }); return data; }
+    const sortAndGroupData = (dataObject, topN = 15) => { const sortedEntries = Object.entries(dataObject).sort(([,a],[,b]) => b - a); if (sortedEntries.length > topN) { const topEntries = sortedEntries.slice(0, topN); const otherEntries = sortedEntries.slice(topN); const otherSum = otherEntries.reduce((sum, [, value]) => sum + value, 0); const labels = topEntries.map(entry => entry[0]); const data = topEntries.map(entry => entry[1]); if (otherSum > 0) { labels.push('Ostalo (Sve ostalo)'); data.push(otherSum); } return { labels, data }; } else { return { labels: sortedEntries.map(entry => entry[0]), data: sortedEntries.map(entry => entry[1]) }; } };
+    function renderCharts() { Object.values(chartInstances).forEach(c=>c?.destroy()); const chartWrappers = document.querySelectorAll('#analyticsPane .chart-wrapper'); const loadingHTML = `<div class="empty-state chart-loading-indicator" style="padding: 20px;"><div class="empty-state-icon" style="font-size: 2rem;">⏳</div><p>Loading Chart...</p></div>`; chartWrappers.forEach(w => {const canvas=w.querySelector('canvas');if(w.querySelector('.chart-loading-indicator'))return;if(canvas)canvas.style.display='none';w.insertAdjacentHTML('beforeend',loadingHTML);}); setTimeout(() => { const cacheKey = JSON.stringify({ filters: { store: document.getElementById('storeFilter').value, category: document.getElementById('categoryFilter').value, subCategory: document.getElementById('subCategoryFilter').value, month: document.getElementById('monthFilter').value, year: document.getElementById('yearFilter').value, query: document.getElementById('searchFilter').value, trendsCat: document.getElementById('trendsCategoryFilter').value, yearlyTrendsCat: document.getElementById('yearlyTrendsCategoryFilter').value, }, exclusions: { stores: [...chartExclusions.stores], categories: [...chartExclusions.categories], subcategories: [...chartExclusions.subcategories] } }); let processedData; if (chartCache.key === cacheKey) { processedData = chartCache.data; } else { processedData = processDataForCharts(filteredExpenses, allExpenses); chartCache.key = cacheKey; chartCache.data = processedData; } document.querySelectorAll('.chart-loading-indicator').forEach(el => el.remove()); chartWrappers.forEach(w=>{const c=w.querySelector('canvas');if(c)c.style.display='block';}); const hasData = filteredExpenses.length > 0; ['chartsEmptyState', 'trendsEmptyState', 'yearlyTrendsEmptyState', 'totalSpendTrendEmptyState'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = hasData ? 'none' : 'block'; }); if (!hasData) return; const selectedCatFilter = document.getElementById('categoryFilter').value; document.getElementById('categoryChartContainer').style.display = hasData && !selectedCatFilter ? 'block' : 'none'; document.getElementById('storeChartContainer').style.display = hasData ? 'block' : 'none'; document.getElementById('subcategoryChartContainer').style.display = hasData && selectedCatFilter ? 'block' : 'none'; const doughnutOpts = { responsive: true, maintainAspectRatio: false, cutout: '65%', hoverOffset: 15, plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${formatCurrency(ctx.dataset.data[ctx.dataIndex])}` } }, datalabels: { formatter: (val, ctx) => { const sum = ctx.chart.data.datasets[0].data.reduce((a, b) => a + b, 0); const pct = (val * 100 / sum).toFixed(1) + '%'; return (val / sum) > 0.03 ? pct : ''; }, color: '#fff', font: { weight: 'bold', size: 16 }, textStrokeColor: 'black', textStrokeWidth: 2 } } }; const catChartData = sortAndGroupData(processedData.category, 15); if (!selectedCatFilter && catChartData.data.length > 0) { const opts = { ...doughnutOpts, onClick: (e, el) => { if(el.length>0){const label = chartInstances.category.data.labels[el[0].index]; if(!label.includes('Ostalo')) saveAndApplyChartFilter('category', label);} } }; chartInstances.category = new Chart('categoryChart', { type: 'doughnut', data: { labels: catChartData.labels, datasets: [{ data: catChartData.data, backgroundColor: VIBRANT_CHART_COLORS }] }, options: opts, plugins: [ChartDataLabels, doughnutText] }); } const storeChartData = sortAndGroupData(processedData.store, 15); if (storeChartData.data.length > 0) { const opts = { ...doughnutOpts, onClick: (e, el) => { if(el.length>0){const label = chartInstances.store.data.labels[el[0].index]; if(!label.includes('Ostalo')) saveAndApplyChartFilter('store', label);} } }; chartInstances.store = new Chart('storeChart', { type: 'doughnut', data: { labels: storeChartData.labels, datasets: [{ data: storeChartData.data, backgroundColor: VIBRANT_CHART_COLORS.slice().reverse() }] }, options: opts, plugins: [ChartDataLabels, doughnutText] }); } const subCatChartData = sortAndGroupData(processedData.subCategory, 15); if (selectedCatFilter && subCatChartData.data.length > 0) { const opts = { ...doughnutOpts, onClick: (e, el) => { if(el.length>0){const label = chartInstances.subcategory.data.labels[el[0].index]; if(!label.includes('Ostalo')) saveAndApplyChartFilter('subCategory', label);} } }; opts.plugins.title = { display: true, align: 'center', text: `Breakdown for: ${selectedCatFilter}`, font:{size: 16} }; chartInstances.subcategory = new Chart('subcategoryChart', { type: 'doughnut', data: { labels: subCatChartData.labels, datasets: [{ data: subCatChartData.data, backgroundColor: VIBRANT_CHART_COLORS }] }, options: opts, plugins: [ChartDataLabels, doughnutText] }); } else { document.getElementById('subcategoryChartContainer').style.display = 'none'; } const allMonths = Object.keys(processedData.monthlyTrends).sort((a,b) => new Date(Date.parse("01 "+a)) - new Date(Date.parse("01 "+b))); if (allMonths.length > 0) { const trendCat = document.getElementById('trendsCategoryFilter').value; let datasets; if (trendCat === 'all') { const groupTotals = Object.values(processedData.monthlyTrends).reduce((acc, monthData) => { for (const cat in monthData.byCat) acc[cat] = (acc[cat] || 0) + monthData.byCat[cat]; return acc; }, {}); const sortedGroups = Object.keys(groupTotals).sort((a,b) => groupTotals[b] - groupTotals[a]); datasets = sortedGroups.map((group, i) => ({ label: group, data: allMonths.map(month => processedData.monthlyTrends[month]?.byCat[group] || 0), backgroundColor: VIBRANT_CHART_COLORS[i % VIBRANT_CHART_COLORS.length] })); } else { const subCatTotals = Object.values(processedData.monthlyTrends).reduce((acc, monthData) => { for (const subCat in monthData.bySubCat) { const mainCat = Object.keys(categories).find(cat => categories[cat].subcategories.includes(subCat)); if (mainCat === trendCat) acc[subCat] = (acc[subCat] || 0) + monthData.bySubCat[subCat]; } return acc; }, {}); const sortedSubCats = Object.keys(subCatTotals).sort((a, b) => subCatTotals[b] - subCatTotals[a]); datasets = sortedSubCats.map((subCat, i) => ({ label: subCat, data: allMonths.map(month => processedData.monthlyTrends[month]?.bySubCat[subCat] || 0), backgroundColor: VIBRANT_CHART_COLORS[i % VIBRANT_CHART_COLORS.length] })); } chartInstances.monthlyTrend = new Chart('monthlyTrendChart', { type: 'bar', data: { labels: allMonths, datasets: datasets }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }, plugins: { title: { display: false } } } }); } const allYears = Object.keys(processedData.yearlyTrends).sort(); if (allYears.length > 1) { document.getElementById('yearlyTrendChartContainer').style.display = 'block'; const yearlyTrendCat = document.getElementById('yearlyTrendsCategoryFilter').value; let datasets; if (yearlyTrendCat === 'all') { const groupTotals = Object.values(processedData.yearlyTrends).reduce((acc, yearData) => { for (const cat in yearData.byCat) acc[cat] = (acc[cat] || 0) + yearData.byCat[cat]; return acc; }, {}); const sortedGroups = Object.keys(groupTotals).sort((a,b) => groupTotals[b] - groupTotals[a]); datasets = sortedGroups.map((group, i) => ({ label: group, data: allYears.map(year => processedData.yearlyTrends[year]?.byCat[group] || 0), backgroundColor: VIBRANT_CHART_COLORS[i % VIBRANT_CHART_COLORS.length] })); } else { const subCatTotals = Object.values(processedData.yearlyTrends).reduce((acc, yearData) => { for (const subCat in yearData.bySubCat) { const mainCat = Object.keys(categories).find(cat => categories[cat].subcategories.includes(subCat)); if (mainCat === yearlyTrendCat) acc[subCat] = (acc[subCat] || 0) + yearData.bySubCat[subCat]; } return acc; }, {}); const sortedSubCats = Object.keys(subCatTotals).sort((a, b) => subCatTotals[b] - subCatTotals[a]); datasets = sortedSubCats.map((subCat, i) => ({ label: subCat, data: allYears.map(year => processedData.yearlyTrends[year]?.bySubCat[subCat] || 0), backgroundColor: VIBRANT_CHART_COLORS[i % VIBRANT_CHART_COLORS.length] })); } chartInstances.yearlyTrend = new Chart('yearlyTrendChart', { type: 'bar', data: { labels: allYears, datasets: datasets }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }, plugins: { title: { display: false } } } }); } else { document.getElementById('yearlyTrendChartContainer').style.display = 'none'; } const sortedMonthKeys = Object.keys(processedData.cumulativeTotalSpend).sort(); if (sortedMonthKeys.length > 1) { document.getElementById('totalSpendTrendChartContainer').style.display = 'block'; document.getElementById('totalSpendTrendEmptyState').style.display = 'none'; const labels = sortedMonthKeys.map(key => new Date(key + '-02').toLocaleDateString(navigator.language||'en-US', { month: 'short', year: '2-digit' })); const data = sortedMonthKeys.map(key => processedData.cumulativeTotalSpend[key]); chartInstances.totalSpendTrend = new Chart('totalSpendTrendChart', { type: 'line', data: { labels: labels, datasets: [createLivelyLineDataset('Total Accumulated Spend', data)] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: false } }, scales: { y: { beginAtZero: false, ticks: { callback: (v) => '€' + new Intl.NumberFormat('de-DE').format(v) } } } } }); } else { document.getElementById('totalSpendTrendChartContainer').style.display = 'none'; document.getElementById('totalSpendTrendEmptyState').style.display = 'block'; } }, 10); }
+    function createLivelyLineDataset(label,data){return{label:label,data:data,borderColor:'#e67e22',borderWidth:4,fill:false,tension:0.4,pointRadius:0,pointHoverRadius:7,pointHoverBackgroundColor:'#d35400',pointHoverBorderColor:'var(--bg-card)',pointBorderWidth:2};}
+    async function handleRecurringExpenses() { if (!activeHousehold) return; const expensesCollection = getExpensesCollectionRef(); const templatesSnapshot = await expensesCollection.where('isRecurring', '==', true).get(); const templates = templatesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); if (templates.length === 0) return; const today = new Date(); const currentMonth = today.getMonth(); const currentYear = today.getFullYear(); const batch = firestore.batch(); let itemsAdded = 0; for (const template of templates) { const sourceId = template.id; const existingSnapshot = await expensesCollection.where('sourceRecurringId', '==', sourceId).where('isRecurring', '==', false).where('date', '>=', `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`).where('date', '<=', `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-31`).get(); if (existingSnapshot.empty) { const originalDate = new Date(template.date); let dayOfMonth = originalDate.getDate(); const daysInCurrentMonth = new Date(currentYear, currentMonth + 1, 0).getDate(); if(dayOfMonth > daysInCurrentMonth) dayOfMonth = daysInCurrentMonth; const newDate = new Date(currentYear, currentMonth, dayOfMonth); const newExpense = { ...template, date: newDate.toISOString().substring(0, 10), isRecurring: false, sourceRecurringId: sourceId, createdAt: firebase.firestore.FieldValue.serverTimestamp() }; delete newExpense.id; const newDocRef = expensesCollection.doc(); batch.set(newDocRef, newExpense); itemsAdded++; } } if (itemsAdded > 0) { try { await batch.commit(); console.log(`Added ${itemsAdded} recurring expenses.`); } catch (error) { console.error("Error generating recurring expenses:", error); } } }
+    async function applyBulkEdit(event) { event.preventDefault(); if(selectedExpenses.size===0)return;showSaveStatus('saving');const updates={};const storeVal=document.getElementById('bulkEditStore').value;let mainCat=document.getElementById('bulkEditMainCategory').value;let subCat=document.getElementById('bulkEditSubCategory').value;const dateVal=document.getElementById('bulkEditDate').value;if(storeVal)updates.store=storeVal;if(dateVal)updates.date=dateVal;let metaUpdated=false;if(mainCat==='__custom__'){mainCat=document.getElementById('bulkEditNewMainCategory').value.trim();if(!mainCat)mainCat="";}if(subCat==='__custom__'){subCat=document.getElementById('bulkEditNewSubCategory').value.trim();if(!subCat)subCat="";}if(mainCat&&mainCat!=='__custom__'&&mainCat!==""){updates.category=mainCat;if(!categories[mainCat]){categories[mainCat]={subcategories:[]};metaUpdated=true;}}if(subCat&&subCat!=='__custom__'&&subCat!==""){const targetMain=updates.category||null;if(targetMain){updates.subCategory=subCat;if(!categories[targetMain].subcategories.includes(subCat)){categories[targetMain].subcategories.push(subCat);categories[targetMain].subcategories.sort();metaUpdated=true;}}else{updates.subCategory=subCat;}}if(metaUpdated){await getHouseholdDocRef().set({categories:categories},{merge:true});}const ids=[...selectedExpenses];if(Object.keys(updates).length>0){try{const batch=firestore.batch();const coll=getExpensesCollectionRef();ids.forEach(id=>batch.update(coll.doc(id),updates));await batch.commit();showSaveStatus('saved');}catch(e){console.error("Error applying bulk edit:",e);showSaveStatus('error');return;}}selectedExpenses.clear();closeModal('bulkEditModal');alert(`Bulk edit applied to ${ids.length} items.`);}
+    async function executeReceiptCode() { const code = document.getElementById('receiptCode').value.trim(); if (!code) return; try { const parsed = JSON.parse(code); if (parsed && parsed.data && Array.isArray(parsed.data.items)) { const existingSigs = new Set(allExpenses.map(e => `${e.name}_${e.price.toFixed(2)}_${e.date}`)); const toImport = parsed.data.items.filter(item => !existingSigs.has(`${item.name}_${(item.price||0).toFixed(2)}_${item.date}`)); const dupes = parsed.data.items.length - toImport.length; if (dupes > 0 && !confirm(`Found ${dupes} potential duplicate(s). They will be skipped. Import the remaining ${toImport.length} new item(s)?`)) return; if (toImport.length === 0) { alert("No new items to import."); return; } await importReceiptData({ items: toImport }); if (parsed.notification) { setTimeout(() => alert(parsed.notification), 100); } } else { alert('Parsed data is not in the expected format.'); } } catch (e) { console.error("Error executing receipt code:", e); alert(`Error parsing receipt code: ${e.message}`); } }
+    async function importReceiptData(data) { showSaveStatus('saving'); const coll = getExpensesCollectionRef(); let metaUpdated = false; const batch = firestore.batch(); data.items.forEach(item => { const mainCat = item.category || 'Ostalo/Nekategorizirano 📎'; const subCat = item.subCategory || (categories[mainCat]?.subcategories.includes('Ostalo') ? 'Ostalo' : (categories[mainCat]?.subcategories[0] || 'Razno')); const storeName = item.store || 'Ostalo'; if(storeName && !stores.includes(storeName)) { stores.push(storeName); stores.sort(); metaUpdated = true; } if (!categories[mainCat]) { categories[mainCat] = { subcategories: [] }; metaUpdated = true; } if (!categories[mainCat].subcategories.includes(subCat)) { categories[mainCat].subcategories.push(subCat); categories[mainCat].subcategories.sort(); metaUpdated = true; } const docRef = coll.doc(); batch.set(docRef, { name: item.name || 'Unknown Item', price: parseFloat(item.price) || 0, quantity: item.quantity || '', store: storeName, category: mainCat, subCategory: subCat, date: item.date || new Date().toISOString().substring(0, 10), isRecurring: item.isRecurring || false, sourceRecurringId: null, createdAt: firebase.firestore.FieldValue.serverTimestamp() }); }); try { await batch.commit(); if (metaUpdated) { await getHouseholdDocRef().set({ categories: categories, stores: stores }, {merge: true}); } showSaveStatus('saved'); alert(`Successfully imported ${data.items.length} items!`); } catch (error) { console.error("Error importing receipt items:", error); showSaveStatus('error'); alert("Error importing receipt items: " + error.message); } }
+    function useMonthlyBillsTemplate() { const now = new Date(); const year = now.getFullYear(); const monthName = now.toLocaleString('en-US', { month: 'long' }); const formattedDate = now.toISOString().substring(0, 10); const template = `{"data":{"items":[{"name":"Račun za Struju - ${monthName} ${year}","price":0.00,"quantity":"","store":"HEP","category":"Režije 💡","subCategory":"Struja","date":"${formattedDate}"},{"name":"Račun za Vodu - ${monthName} ${year}","price":0.00,"quantity":"","store":"Vodovod","category":"Režije 💡","subCategory":"Voda","date":"${formattedDate}"},{"name":"Račun za Stanarinu - ${monthName} ${year}","price":0.00,"quantity":"","store":"Najmodavac","category":"Stanovanje 🏠","subCategory":"Najamnina","date":"${formattedDate}"}]},"notification":""}`; document.getElementById('receiptCode').value = template; alert('Monthly bills template pasted!'); }
+    function showReceiptSample() { document.getElementById('receiptCode').value = `{"data":{"items":[{"name":"Jabuke","price":2.50,"quantity":"1kg","store":"Konzum","category":"Prehrana i Namirnice 🍔","subCategory":"Voće","date":"${new Date().toISOString().slice(0,10)}"}]},"notification":""}`; document.getElementById('receiptCode').focus(); }
+    async function saveNewSubCategory(event) { event.preventDefault(); const newName = document.getElementById('newManagedSubCategoryName').value.trim(); const parentCat = document.getElementById('parentCategorySelect').value; if (!newName || !parentCat || !categories[parentCat]) { alert("Invalid input."); return; } if (categories[parentCat].subcategories.includes(newName)) { alert("Sub-category already exists."); return; } categories[parentCat].subcategories.push(newName); categories[parentCat].subcategories.sort(); try { await getHouseholdDocRef().set({ categories: categories }, {merge: true}); alert(`Sub-category "${newName}" created.`); closeModal('createSubCategoryModal'); renderManagementTables(); } catch (e) { console.error("Error saving new subcategory:", e); } }
+    async function createManagedItem(type) { let name = prompt(`Enter new ${type} name:`); if (!name) return; name = name.trim(); let metaUpdated = false; if (type === 'category') { if (categories[name]) { alert("Category exists."); return; } categories[name] = { subcategories: [] }; metaUpdated = true; } else if (type === 'store') { if (stores.some(s => s.toLowerCase() === name.toLowerCase())) { alert("Store exists."); return; } stores.push(name); stores.sort(); metaUpdated = true; } if (metaUpdated) { await getHouseholdDocRef().set({ categories: categories, stores: stores }, {merge: true}); renderManagementTables(); alert(`${type} "${name}" created.`); } }
+    async function deleteManagedItem(type, name) { if (!confirm(`Delete "${name}"? This cannot be undone.`)) return; const coll = getExpensesCollectionRef(); let isInUse = false; if (type === 'subCategory') { isInUse = (await coll.where('subCategory', '==', name).limit(1).get()).docs.length > 0; } else { isInUse = (await coll.where(type, '==', name).limit(1).get()).docs.length > 0; } if (isInUse) { alert(`Cannot delete "${name}", it is in use. Please re-assign expenses first.`); return; } let metaUpdated = false; if (type === 'category') { delete categories[name]; metaUpdated = true; } else if (type === 'subCategory') { for (const catKey in categories) { const idx = categories[catKey].subcategories?.indexOf(name); if (idx > -1) { categories[catKey].subcategories.splice(idx, 1); metaUpdated = true; } } } else if (type === 'store') { const idx = stores.indexOf(name); if (idx > -1) { stores.splice(idx, 1); metaUpdated = true; } } if (metaUpdated) { await getHouseholdDocRef().set({ categories: categories, stores: stores }, {merge: true}); renderManagementTables(); alert(`Successfully deleted "${name}".`); } }
+    function renderManagementTables() { const createTable = (items, type, searchTerm) => { let html = '<table class="management-table"><thead><tr><th>Name</th><th style="text-align: right;">Action</th></tr></thead><tbody>'; const filtered = items.filter(item => item.toLowerCase().includes(searchTerm)); if (filtered.length === 0) { html += '<tr><td colspan="2" style="text-align:center;">No items found.</td></tr>'; } else { filtered.forEach(item => { html += `<tr><td>${item}</td><td><button class="btn-icon btn-danger" onclick="deleteManagedItem('${type}', '${item.replace(/'/g, "\\'")}')">🗑️</button></td></tr>`; }); } html += '</tbody></table>'; return html; }; const catSearch = document.getElementById('manageCategorySearch').value.toLowerCase(); document.getElementById('managementCategoriesContainer').innerHTML = createTable(Object.keys(categories).sort(), 'category', catSearch); const subCatSearch = document.getElementById('manageSubCategorySearch').value.toLowerCase(); const allSubCats = [...new Set(Object.values(categories).flatMap(c => c.subcategories || []))].sort(); document.getElementById('managementSubCategoriesContainer').innerHTML = createTable(allSubCats, 'subCategory', subCatSearch); const storeSearch = document.getElementById('manageStoreSearch').value.toLowerCase(); const allStores = [...new Set([...stores, ...allExpenses.map(e => e.store)])].filter(Boolean).sort(); document.getElementById('managementStoresContainer').innerHTML = createTable(allStores, 'store', storeSearch); }
+    async function handleIncomeForm(event) { event.preventDefault(); const year = parseInt(document.getElementById('incomeYear').value); const month = parseInt(document.getElementById('incomeMonth').value); const amount = parseFloat(document.getElementById('incomeAmount').value); if (isNaN(year) || isNaN(month) || isNaN(amount)) { alert('Please enter valid income details.'); return; } try { await getIncomeCollectionRef().doc(`${year}-${String(month + 1).padStart(2, '0')}`).set({ year, month, amount }); alert(`Income for ${new Date(year, month).toLocaleString('default', { month: 'long' })} saved.`); const nextMonth = (month + 1) % 12; const nextYear = month === 11 ? year + 1 : year; document.getElementById('incomeMonth').value = nextMonth; document.getElementById('incomeYear').value = nextYear; populateIncomeForm(); document.getElementById('incomeAmount').focus(); } catch (e) { console.error("Error saving income:", e); } }
+    async function loadSampleIncome() { if (!activeHousehold || !confirm("Add sample income for 2024?")) return; try { const coll = getIncomeCollectionRef(); const batch = firestore.batch(); for (let i = 0; i < 12; i++) { batch.set(coll.doc(`2024-${String(i + 1).padStart(2, '0')}`), { year: 2024, month: i, amount: i < 6 ? 3700 : 4000 }); } await batch.commit(); alert("Sample income loaded."); } catch (e) { console.error("Error loading sample income:", e); } }
+    async function clearAllIncomes() { if (!activeHousehold || !confirm("Delete ALL income data?")) return; try { const snapshot = await getIncomeCollectionRef().get(); const batch = firestore.batch(); snapshot.docs.forEach(doc => batch.delete(doc.ref)); await batch.commit(); alert("All income data cleared."); } catch (e) { console.error("Error clearing income data:", e); } }
+    function populateIncomeForm() { const yearSel = document.getElementById('incomeYear'); const monthSel = document.getElementById('incomeMonth'); const amountInput = document.getElementById('incomeAmount'); if (yearSel.options.length === 0) { const currentYear = new Date().getFullYear(); for (let y = currentYear + 1; y >= currentYear - 5; y--) { yearSel.add(new Option(y, y)); } const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]; monthNames.forEach((m, i) => monthSel.add(new Option(m, i))); yearSel.value = currentYear; monthSel.value = new Date().getMonth(); } const year = parseInt(yearSel.value); const month = parseInt(monthSel.value); const incomeEntry = allIncomes.find(i => i.year === year && i.month === month); amountInput.value = incomeEntry ? incomeEntry.amount : ''; }
+    async function renderSavingsAnalysis() { if(chartInstances.savings)chartInstances.savings.destroy();if(chartInstances.cumulativeSavings)chartInstances.cumulativeSavings.destroy();const tableContainer=document.getElementById('savingsTableContainer');const savingsChartContainer=document.getElementById('savingsChartContainer');const cumulativeContainer=document.getElementById('cumulativeSavingsChartContainer');const expenseTotals=allExpenses.reduce((acc,item)=>{const key=item.date.substring(0,7);acc[key]=(acc[key]||0)+item.price;return acc;},{});const allMonthKeys=[...new Set([...Object.keys(expenseTotals),...allIncomes.map(i=>`${i.year}-${String(i.month+1).padStart(2,'0')}`)])].sort();if(allMonthKeys.length===0){tableContainer.innerHTML='<div class="empty-state"><p>No expense or income data available.</p></div>';savingsChartContainer.style.display='none';cumulativeContainer.style.display='none';return;}savingsChartContainer.style.display='block';cumulativeContainer.style.display='block';const savingsData=[];let lastKnownIncome=0;const sortedIncomes=[...allIncomes].sort((a,b)=>(a.year*12+a.month)-(b.year*12+b.month));let cumulativeSavings=0;for(const key of allMonthKeys){const[year,monthNum]=key.split('-').map(Number);const monthIndex=monthNum-1;const incomeEntry=sortedIncomes.find(i=>i.year===year&&i.month===monthIndex);if(incomeEntry)lastKnownIncome=incomeEntry.amount;const expenses=expenseTotals[key]||0;const savings=lastKnownIncome-expenses;cumulativeSavings+=savings;savingsData.push({key:key,label:new Date(key+"-02").toLocaleDateString(navigator.language,{month:'short',year:'2-digit'}),income:lastKnownIncome,expenses:expenses,savings:savings,cumulativeSavings:cumulativeSavings});}let tableHTML=`<table class="savings-table"><thead><tr><th>Month</th><th>Income</th><th>Expenses</th><th>Savings</th><th>Actions</th></tr></thead><tbody>`;[...savingsData].reverse().forEach(data=>{const[year,month]=data.key.split('-').map(Number);const savingsClass=data.savings>=0?'surplus':'deficit';tableHTML+=`<tr><td>${data.label}</td><td>${formatCurrency(data.income)}</td><td>${formatCurrency(data.expenses)}</td><td class="${savingsClass}">${formatCurrency(data.savings)}</td><td><button class="btn-icon" title="Edit Income" onclick="editIncome(${year},${month-1})">✏️</button><button class="btn-icon btn-danger" title="Delete Income" onclick="deleteIncome(${year},${month-1})">🗑️</button></td></tr>`;});tableHTML+=`</tbody></table>`;tableContainer.innerHTML=tableHTML;chartInstances.savings=new Chart('savingsChart',{type:'bar',data:{labels:savingsData.map(d=>d.label),datasets:[{label:'Monthly Savings',data:savingsData.map(d=>d.savings),backgroundColor:savingsData.map(d=>d.savings>=0?'rgba(46,204,113,0.7)':'rgba(231,76,60,0.7)'),borderColor:savingsData.map(d=>d.savings>=0?'rgba(46,204,113,1)':'rgba(231,76,60,1)'),borderWidth:1}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},title:{display:true,text:"Monthly Savings (Surplus / Deficit)"}},scales:{y:{ticks:{callback:value=>formatCurrency(value)}}}}});chartInstances.cumulativeSavings=new Chart('cumulativeSavingsChart',{type:'line',data:{labels:savingsData.map(d=>d.label),datasets:[createLivelyLineDataset('Cumulative Savings',savingsData.map(d=>d.cumulativeSavings))]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},title:{display:true,text:"Cumulative Savings Over Time"}},scales:{y:{ticks:{callback:value=>formatCurrency(value)}}}}});}
+    async function editIncome(year,month){if(!currentUser)return;document.getElementById('incomeYear').value=year;document.getElementById('incomeMonth').value=month;const entry=allIncomes.find(i=>i.year===year&&i.month===month);document.getElementById('incomeAmount').value=entry?entry.amount:'';document.getElementById('incomeAmount').focus();}
+    async function deleteIncome(year,month){if(!currentUser)return;if(confirm(`Delete income entry for ${new Date(year,month).toLocaleString('default',{month:'long',year:'numeric'})}?`)){try{await getIncomeCollectionRef().doc(`${year}-${String(month+1).padStart(2,'0')}`).delete();alert('Income entry deleted.');}catch(e){console.error("Error deleting income:",e);}}}
+    async function checkBackupReminder() { if (!activeHousehold) { document.getElementById('backupReminder').style.display = 'none'; return; } const reminderEl = document.getElementById('backupReminder'); const reminderSpan = reminderEl.querySelector('span'); const lastBackup = activeHousehold.lastBackupTimestamp; if (!lastBackup) { reminderSpan.textContent = "You've never backed up your data. It's a good idea to export it now!"; reminderEl.style.display = 'flex'; } else { const thirtyDays = 30 * 24 * 60 * 60 * 1000; if (Date.now() - lastBackup > thirtyDays) { const daysAgo = Math.round((Date.now() - lastBackup) / (1000*60*60*24)); reminderSpan.textContent = `Your last backup was ${daysAgo} days ago. Consider exporting your data soon!`; reminderEl.style.display = 'flex'; } else { reminderEl.style.display = 'none'; } } }
+    function populateComparisonYearSelects() { const baseSel = document.getElementById('baseYearSelect'); const compareSel = document.getElementById('compareYearSelect'); const years = [...new Set(allExpenses.map(e => e.date.substring(0, 4)))].sort((a,b) => b-a); if (baseSel.options.length > 1 && compareSel.options.length > 1 && baseSel.options.length === years.length + 1) return; baseSel.innerHTML = ''; compareSel.innerHTML = ''; if (years.length < 2) { baseSel.innerHTML = '<option>Not enough data</option>'; compareSel.innerHTML = '<option>Not enough data</option>'; return; } years.forEach(y => { baseSel.add(new Option(y, y)); compareSel.add(new Option(y, y)); }); if (baseSel.options.length > 1) baseSel.value = years[1]; if (compareSel.options.length > 0) compareSel.value = years[0]; }
+    function updateComparisonView(newGroupBy=null,newViewMode=null){if(newGroupBy){comparisonGroupBy=newGroupBy;comparisonSortBy='percentageChange';comparisonSortDir='desc';}if(newViewMode)comparisonViewMode=newViewMode;document.querySelectorAll('#compareByToggle .btn').forEach(b=>b.classList.remove('active'));document.querySelector(`#compareByToggle button[data-group="${comparisonGroupBy}"]`).classList.add('active');document.querySelectorAll('#comparisonViewToggle .btn').forEach(b=>b.classList.remove('active'));document.querySelector(`#comparisonViewToggle button[data-view="${comparisonViewMode}"]`).classList.add('active');const table=document.getElementById('comparisonTableContainer');const chart=document.getElementById('comparisonChartContainer');if(comparisonViewMode==='chart'){table.classList.add('hidden');chart.classList.remove('hidden');renderTornadoChart(comparisonGroupBy);}else{table.classList.remove('hidden');chart.classList.add('hidden');if(chartInstances.tornado)chartInstances.tornado.destroy();renderComparisonTable(comparisonGroupBy);}}
+    function getComparisonData(groupBy){const baseYear=document.getElementById('baseYearSelect').value;const compareYear=document.getElementById('compareYearSelect').value;if(!baseYear||!compareYear||baseYear===compareYear||baseYear==='Not enough data')return null;const baseData=allExpenses.filter(e=>e.date.startsWith(baseYear));const compareData=allExpenses.filter(e=>e.date.startsWith(compareYear));const keySelector=item=>(groupBy==='store')?item.store:(groupBy==='subcategory'?item.subCategory:item.category)||'N/A';const baseTotals=baseData.reduce((acc,item)=>{const key=keySelector(item);acc[key]=(acc[key]||0)+item.price;return acc;},{});const compareTotals=compareData.reduce((acc,item)=>{const key=keySelector(item);acc[key]=(acc[key]||0)+item.price;return acc;},{});const allKeys=[...new Set([...Object.keys(baseTotals),...Object.keys(compareTotals)])];let results=allKeys.map(key=>{const base=baseTotals[key]||0;const compare=compareTotals[key]||0;const diff=compare-base;const pctChange=base!==0?(diff/base)*100:(compare>0?Infinity:0);return{key,baseAmount:base,compareAmount:compare,difference:diff,percentageChange:pctChange};});results.sort((a,b)=>{let valA=a[comparisonSortBy];let valB=b[comparisonSortBy];if(comparisonSortBy==='percentageChange'){valA=isFinite(valA)?valA:Infinity;valB=isFinite(valB)?valB:Infinity;}if(comparisonSortDir==='desc')return valB-valA;else return valA-valB;});return results;}
+    function handleComparisonSort(sortBy){if(comparisonSortBy===sortBy){comparisonSortDir=comparisonSortDir==='desc'?'asc':'desc';}else{comparisonSortBy=sortBy;comparisonSortDir='desc';}renderComparisonTable(comparisonGroupBy);}
+    function renderComparisonTable(groupBy='category'){const container=document.getElementById('comparisonTableContainer');const data=getComparisonData(groupBy);if(!data){container.innerHTML='<div class="empty-state"><p>Please select two different years to compare.</p></div>';return;}const headerLabel=groupBy==='store'?'Store':(groupBy==='subcategory'?'Sub-Category':'Category');const sortIndicator=(key)=>{if(key===comparisonSortBy){return comparisonSortDir==='desc'?' ▼':' ▲';}return'';};let tableHTML=`<table class="comparison-table"><thead><tr><th>${headerLabel}</th><th data-sort="baseAmount" onclick="handleComparisonSort('baseAmount')">${document.getElementById('baseYearSelect').value} Total${sortIndicator('baseAmount')}</th><th data-sort="compareAmount" onclick="handleComparisonSort('compareAmount')">${document.getElementById('compareYearSelect').value} Total${sortIndicator('compareAmount')}</th><th data-sort="difference" onclick="handleComparisonSort('difference')">Change (€)${sortIndicator('difference')}</th><th data-sort="percentageChange" onclick="handleComparisonSort('percentageChange')">Change (%)${sortIndicator('percentageChange')}</th></tr></thead><tbody>`;data.forEach(item=>{let changeClass='';if(item.difference>0)changeClass='increase';if(item.difference<0)changeClass='decrease';tableHTML+=`<tr><td>${item.key}</td><td>${formatCurrency(item.baseAmount)}</td><td>${formatCurrency(item.compareAmount)}</td><td class="${changeClass}">${formatCurrency(item.difference)}</td><td class="${changeClass}">${item.percentageChange===Infinity?'NEW':(isFinite(item.percentageChange)?item.percentageChange.toFixed(2)+'%':'N/A')}</td></tr>`;});tableHTML+='</tbody></table>';container.innerHTML=tableHTML;}
+    function renderTornadoChart(groupBy='category'){if(chartInstances.tornado)chartInstances.tornado.destroy();const data=getComparisonData(groupBy);const container=document.getElementById('comparisonChartContainer');if(!data||data.length===0){container.innerHTML='<div class="empty-state"><p>Not enough data to generate a chart.</p></div>';return;}container.innerHTML='<canvas id="tornadoChart"></canvas>';const ctx=document.getElementById('tornadoChart').getContext('2d');const colorSuccess=getComputedStyle(document.documentElement).getPropertyValue('--success').trim();const colorDanger=getComputedStyle(document.documentElement).getPropertyValue('--danger').trim();chartInstances.tornado=new Chart(ctx,{type:'bar',data:{labels:data.map(d=>d.key),datasets:[{label:'Percentage Change',data:data.map(d=>isFinite(d.percentageChange)?d.percentageChange:(d.compareAmount>0?300:0)),backgroundColor:data.map(d=>d.percentageChange>=0?colorDanger:colorSuccess),}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,scales:{x:{ticks:{callback:function(value){return value+'%';}},title:{display:true,text:'Percentage Change (%)'}},y:{ticks:{autoSkip:false}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(context){const item=data[context.dataIndex];if(item.percentageChange===Infinity){return` ${item.key}: NEW (+${formatCurrency(item.compareAmount)})`;}return` ${item.key}: ${item.percentageChange.toFixed(2)}%`;}}}}}});}
+    function populateExclusionModal(type){const prefix=type==='chart'?'exclusion':'tsExclusion';const exclusions=type==='chart'?chartExclusions:topSpendersExclusions;const createCheckbox=(item,itemType)=>{const isChecked=exclusions[itemType]&&exclusions[itemType].has(item);const id=`${type}_excl_${itemType}_${item.replace(/[^a-zA-Z0-9]/g,"")}`;return`<div class="checkbox-item"><input type="checkbox" id="${id}" value="${item}" ${isChecked?'checked':''}><label for="${id}">${item}</label></div>`;};const uniqueStores=[...new Set([...stores,...allExpenses.map(e=>e.store||'Ostalo')])].sort();document.getElementById(`${prefix}StoresList`).innerHTML=uniqueStores.map(s=>createCheckbox(s,'stores')).join('');document.getElementById(`${prefix}CategoriesList`).innerHTML=Object.keys(categories).sort().map(c=>createCheckbox(c,'categories')).join('');const allSubCats=new Set();Object.values(categories).forEach(cat=>cat.subcategories.forEach(sub=>allSubCats.add(sub)));allExpenses.forEach(exp=>{if(exp.subCategory)allSubCats.add(exp.subCategory);});document.getElementById(`${prefix}SubCategoriesList`).innerHTML=[...allSubCats].sort().map(sc=>createCheckbox(sc,'subcategories')).join('');const modalId=type==='chart'?'chartExclusionModal':'topSpendersExclusionModal';const firstTab=document.querySelector(`#${modalId} .modal-tab-btn`);const firstPaneId=firstTab.getAttribute('onclick').match(/'([^']+)'/g)[1].replace(/'/g,'');switchModalTab(firstTab,firstPaneId);filterExclusionCheckboxes(type);}
+    function showChartExclusionModal(){populateExclusionModal('chart');document.getElementById('chartExclusionModal').style.display='block';}
+    function showTopSpendersExclusionModal(){populateExclusionModal('ts');document.getElementById('topSpendersExclusionModal').style.display='block';}
+    function showCreateSubCategoryModal(){const form=document.getElementById('createSubCategoryForm');form.reset();const parentSelect=document.getElementById('parentCategorySelect');parentSelect.innerHTML='';Object.keys(categories).sort().forEach(cat=>parentSelect.add(new Option(cat,cat)));document.getElementById('createSubCategoryModal').style.display='block';}
+    function saveCurrentFilterState(){previousFilterState={store:document.getElementById('storeFilter').value,category:document.getElementById('categoryFilter').value,subCategory:document.getElementById('subCategoryFilter').value,month:document.getElementById('monthFilter').value,year:document.getElementById('yearFilter').value,query:document.getElementById('searchFilter').value,sort:document.getElementById('sortFilter').value,};}
+    function saveAndApplyChartFilter(type,value){saveCurrentFilterState();document.getElementById('chartBackBtn').classList.remove('hidden');if(type==='category'){document.getElementById('categoryFilter').value=value;updateSubCategoryFilter();}else if(type==='store'){document.getElementById('storeFilter').value=value;}else if(type==='subCategory'){document.getElementById('subCategoryFilter').value=value;}applyFilters();}
+    function restorePreviousFilterState(){if(!previousFilterState)return;document.getElementById('storeFilter').value=previousFilterState.store;document.getElementById('categoryFilter').value=previousFilterState.category;updateSubCategoryFilter();document.getElementById('subCategoryFilter').value=previousFilterState.subCategory;document.getElementById('monthFilter').value=previousFilterState.month;document.getElementById('yearFilter').value=previousFilterState.year;document.getElementById('searchFilter').value=previousFilterState.query;document.getElementById('sortFilter').value=previousFilterState.sort;applyFilters();previousFilterState=null;document.getElementById('chartBackBtn').classList.add('hidden');}
+    function showInviteModal(){if(!activeHousehold)return;document.getElementById('inviteForm').reset();document.getElementById('inviteModal').style.display='block';}
+    function exportToCSV(event) { event.preventDefault(); const items = filteredExpenses; if (items.length === 0) { alert("No data to export."); return; } const replacer = (key, value) => value === null ? '' : value; const header = ['date', 'name', 'quantity', 'price', 'category', 'subCategory', 'store']; let csv = items.map(row => header.map(fieldName => JSON.stringify(row[fieldName] || '', replacer)).join(',')); csv.unshift(header.join(',')); const csvContent = '\uFEFF' + csv.join('\r\n'); const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a"); if (link.download !== undefined) { const url = URL.createObjectURL(blob); link.setAttribute("href", url); link.setAttribute("download", `expenses_export_${new Date().toISOString().slice(0,10)}.csv`); link.style.visibility = 'hidden'; document.body.appendChild(link); link.click(); document.body.removeChild(link); } }
+    function exportToPDF(event) { event.preventDefault(); const items = filteredExpenses; if (items.length === 0) { alert("No data to export."); return; } const { jsPDF } = window.jspdf; const doc = new jsPDF(); const tableColumn = ["Date", "Name", "Qty", "Price", "Category", "Sub-Category", "Store"]; const tableRows = []; items.forEach(item => { const itemData = [ item.date, item.name, item.quantity || '', formatCurrency(item.price), item.category, item.subCategory, item.store ]; tableRows.push(itemData); }); doc.autoTable({ head: [tableColumn], body: tableRows, startY: 20, styles: { font: "helvetica", fontSize: 8 }, headStyles: { fontStyle: 'bold' }}); doc.text(`Filtered Expense Report for ${activeHousehold.name}`, 14, 15); doc.save(`expenses_export_${new Date().toISOString().slice(0,10)}.pdf`); }
+
+    main();
+    </script>
+</body>
+</html>
